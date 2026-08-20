@@ -1,0 +1,33 @@
+alerts: true
+updates:
+  check: true
+setback-violations: 2.0
+max-packet-actions: 12
+inventory-move:
+  input-threshold: 0.075
+  request-window-ms: 750
+  buffer-threshold: 2
+timer:
+  warmup-packets: 40
+  violation-samples: 8
+prediction:
+  # Offset, in blocks, ignored on a single tick. Anything above it feeds the buffer below.
+  tolerance: 0.05
+  # Accumulated excess offset needed before the player is flagged.
+  buffer-threshold: 0.6
+  # Removed from the buffer on every tick that matches the simulation.
+  buffer-decay: 0.08
+vehicle:
+  tolerance: 0.16
+  buffer-threshold: 0.4
+  buffer-decay: 0.1
+combat:
+  bbox-expansion: 0.1
+  reach-leniency: 0.0
+  interpolation-steps: 10
+  maximum-attack-angle: 85.0
+  close-range-fallback: 1.75
+  close-range-angle: 35.0
+blocks:
+  max-reach: 7.0
+  break-leniency-ms: 75

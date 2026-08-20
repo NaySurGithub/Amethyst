@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "[0-9]*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example 1.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Download PowerNukkitX
+        run: curl --fail --location --retry 3 --output ../powernukkitx.jar https://github.com/PowerNukkitX/PowerNukkitX/releases/download/3.0.2/powernukkitx.jar
+
+      - name: Build Amethyst
+        run: |
+          chmod +x gradlew
+          ./gradlew clean build --no-daemon
+
+      - name: Select release tag
+        id: release
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          RELEASE_JAR="build/libs/Amethyst-${RELEASE_TAG#v}.jar"
+          test -f "$RELEASE_JAR"
+          gh release delete "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --yes || true
+          gh release create "$RELEASE_TAG" "$RELEASE_JAR#Amethyst-${RELEASE_TAG#v}.jar" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Amethyst $RELEASE_TAG" \
+            --generate-notes
