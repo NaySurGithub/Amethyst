@@ -12,7 +12,6 @@ import java.util.Map;
 
 public final class FrameWorldView implements MovementWorldView {
     private static final float SOLID_ENTITY_RANGE = 1.5f;
-    private static final float FLUID_TEST_INSET = 0.4f;
 
     private final WorldFrame frame;
     private final Map<BlockFrame, MovementBlockView> views = new IdentityHashMap<>();
@@ -95,11 +94,6 @@ public final class FrameWorldView implements MovementWorldView {
         int bubbleDirection = 0;
         boolean bubbleSurface = false;
 
-        float inset = Math.max(0.0f, Math.min(FLUID_TEST_INSET,
-                (area.maxY() - area.minY() - 0.02f) * 0.5f));
-        float testMinY = area.minY() + inset;
-        float testMaxY = area.maxY() - inset;
-
         for (BlockPos position : frame.index().fluids()) {
             BlockFrame block = frame.blocks().get(position);
             if (block == null) {
@@ -107,7 +101,7 @@ public final class FrameWorldView implements MovementWorldView {
             }
 
             float top = position.y() + (float) block.fluidHeight();
-            if (top <= testMinY || position.y() >= testMaxY
+            if (top <= area.minY() || position.y() >= area.maxY()
                     || position.x() + 1 <= area.minX() || position.x() >= area.maxX()
                     || position.z() + 1 <= area.minZ() || position.z() >= area.maxZ()) {
                 continue;

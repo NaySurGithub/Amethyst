@@ -54,6 +54,9 @@ public final class PlayerData {
     public boolean wasSprinting;
     public boolean wasLevitating;
     public long lastGlideTick = Long.MIN_VALUE;
+    public long lastSleepingTick = Long.MIN_VALUE;
+    public boolean inBed;
+    public int vehicleClaimBuffer;
     public long lastGlideStartTick = Long.MIN_VALUE;
     public long itemUseStartTick = Long.MIN_VALUE;
     /** Last ground position the simulation agreed with, and the target of a setback. */
@@ -396,6 +399,9 @@ public final class PlayerData {
         wasSprinting = false;
         wasLevitating = false;
         lastGlideTick = Long.MIN_VALUE;
+        lastSleepingTick = Long.MIN_VALUE;
+        inBed = false;
+        vehicleClaimBuffer = 0;
         lastGlideStartTick = Long.MIN_VALUE;
         itemUseStartTick = Long.MIN_VALUE;
         directSetback = null;

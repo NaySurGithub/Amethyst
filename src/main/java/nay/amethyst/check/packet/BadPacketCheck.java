@@ -5,6 +5,9 @@ import nay.amethyst.check.scaffold.WeirdPlaceCheck;
 import nay.amethyst.check.type.CheckType;
 import nay.amethyst.data.player.PlayerData;
 import org.cloudburstmc.math.vector.Vector2f;
+import org.cloudburstmc.math.vector.Vector3f;
+import org.cloudburstmc.protocol.bedrock.packet.RequestChunkRadiusPacket;
+import org.powernukkitx.entity.Entity;
 import org.cloudburstmc.protocol.bedrock.data.PlayerActionType;
 import org.cloudburstmc.protocol.bedrock.data.PlayerAuthInputData;
 import org.cloudburstmc.protocol.bedrock.data.PlayerBlockActionData;
@@ -27,6 +30,12 @@ import org.cloudburstmc.protocol.bedrock.packet.PlayerAuthInputPacket;
 import org.powernukkitx.Player;
 
 public final class BadPacketCheck {
+    private static final int MINIMUM_CHUNK_RADIUS = 1;
+    private static final int MAXIMUM_CHUNK_RADIUS = 96;
+    private static final int VOID_MARGIN = 512;
+    private static final double HORIZONTAL_LIMIT = 30_000_000.0;
+    private static final int VEHICLE_CLAIM_TICKS = 10;
+
     public Result inspect(Player player, PlayerData data, BedrockPacket packet) {
         if (packet instanceof PlayerAuthInputPacket input) return inspectAuthInput(player, data, input);
         if (packet instanceof InventoryTransactionPacket transaction) return inspectTransaction(player, data, transaction);
@@ -34,6 +43,54 @@ public final class BadPacketCheck {
         if (packet instanceof PlayerActionPacket action) return inspectPlayerAction(player, action);
         if (packet instanceof MobEquipmentPacket equipment && !hotbarSlot(equipment.getSelectedSlot())) {
             return result(CheckType.BAD_PACKET_I, "hotbar-slot=" + equipment.getSelectedSlot());
+        }
+        if (packet instanceof RequestChunkRadiusPacket radius) {
+            int requested = radius.getChunkRadius();
+            if (requested < MINIMUM_CHUNK_RADIUS || requested > MAXIMUM_CHUNK_RADIUS) {
+                return result(CheckType.BAD_PACKET_Q, "radius=" + requested);
+            }
+        }
+        return null;
+    }
+
+    private static Result inspectVehicleClaim(Player player, PlayerData data,
+                                              PlayerAuthInputPacket packet) {
+        boolean claims = packet.getInputData()
+                .contains(PlayerAuthInputData.IS_IN_CLIENT_PREDICTED_VEHICLE);
+        if (!claims) {
+            data.vehicleClaimBuffer = 0;
+            return null;
+        }
+
+        Entity riding = player.getRiding();
+        Long predicted = packet.getClientPredictedVehicle();
+        boolean matches = riding != null
+                && (predicted == null || predicted == 0 || predicted == riding.getId());
+        if (matches) {
+            data.vehicleClaimBuffer = 0;
+            return null;
+        }
+
+        if (++data.vehicleClaimBuffer < VEHICLE_CLAIM_TICKS) {
+            return null;
+        }
+        data.vehicleClaimBuffer = 0;
+        return result(CheckType.BAD_PACKET_O, riding == null
+                ? "claimed vehicle " + predicted + " while riding nothing"
+                : "claimed vehicle " + predicted + " while riding " + riding.getId());
+    }
+
+    private static Result inspectPositionBounds(Player player, PlayerAuthInputPacket packet) {
+        Vector3f position = packet.getPosition();
+        if (position == null) {
+            return null;
+        }
+        int minimumY = player.getLevel().getDimensionData().getMinHeight() - VOID_MARGIN;
+        int maximumY = player.getLevel().getDimensionData().getMaxHeight() + VOID_MARGIN;
+        if (position.getY() < minimumY || position.getY() > maximumY
+                || Math.abs(position.getX()) > HORIZONTAL_LIMIT
+                || Math.abs(position.getZ()) > HORIZONTAL_LIMIT) {
+            return result(CheckType.BAD_PACKET_P, "position=" + position);
         }
         return null;
     }
@@ -48,6 +105,13 @@ public final class BadPacketCheck {
         Vector2f move = packet.getMoveVector();
         if (move == null || !validMoveComponent(move.getX()) || !validMoveComponent(move.getY())) {
             return result(CheckType.BAD_PACKET_H, "move-vector=" + move);
+        }
+
+        if (!data.inGrace() && !data.hasPendingTeleport() && !data.hasMovementCorrection()) {
+            Result bounds = inspectPositionBounds(player, packet);
+            if (bounds != null) return bounds;
+            Result vehicle = inspectVehicleClaim(player, data, packet);
+            if (vehicle != null) return vehicle;
         }
 
         if (packet.getItemStackRequest() != null) {
@@ -103,7 +167,7 @@ public final class BadPacketCheck {
         if (scaffold != null) return result(CheckType.SCAFFOLD_A, scaffold.detail());
         if (transaction.getActionType() == ItemUseActionType.PLACE) {
             WeirdPlaceCheck.Result weird = WeirdPlaceCheck.inspect(player, data, transaction);
-            if (weird != null) return result(CheckType.WEIRD_PLACE_A, weird.detail());
+            if (weird != null) return result(CheckType.BAD_PACKET_N, weird.detail());
         }
         if (!hotbarSlot(transaction.getSlot())) {
             return result(CheckType.BAD_PACKET_I, "hotbar-slot=" + transaction.getSlot());

@@ -33,6 +33,8 @@ import org.cloudburstmc.math.vector.Vector2f;
 import org.cloudburstmc.math.vector.Vector3f;
 import org.cloudburstmc.math.vector.Vector3i;
 import org.cloudburstmc.protocol.bedrock.data.PlayerActionType;
+import org.cloudburstmc.protocol.bedrock.packet.PlayerActionPacket;
+import org.cloudburstmc.protocol.bedrock.packet.InteractPacket;
 import org.cloudburstmc.protocol.bedrock.data.PlayerAuthInputData;
 import org.cloudburstmc.protocol.bedrock.data.AbilitiesIndex;
 import org.cloudburstmc.protocol.bedrock.data.actor.ActorDataTypes;
@@ -98,6 +100,8 @@ import org.powernukkitx.event.player.PlayerQuitEvent;
 import org.powernukkitx.event.player.PlayerRespawnEvent;
 import org.powernukkitx.event.player.PlayerSpearStabEvent;
 import org.powernukkitx.event.player.PlayerTeleportEvent;
+import org.powernukkitx.event.player.PlayerBedEnterEvent;
+import org.powernukkitx.event.player.PlayerBedLeaveEvent;
 import org.powernukkitx.event.server.PacketReceiveEvent;
 import org.powernukkitx.event.server.PacketSendEvent;
 import org.powernukkitx.level.Location;
@@ -141,6 +145,7 @@ public final class PacketListener implements Listener {
     private static final double GLIDE_TOLERANCE = 8.0;
     private static final long LEVITATION_GRACE_MILLIS = 3000;
     private static final int GLIDE_TAIL_TICKS = 20;
+    private static final int SLEEP_GRACE_TICKS = 100;
     private static final Set<String> THROWN_FROM_HOTBAR = Set.of(ItemID.POTION,
             ItemID.SPLASH_POTION, ItemID.LINGERING_POTION, ItemID.ENDER_PEARL);
     private static final double MAX_SIMULATED_MOVEMENT_SPEED = 0.5;
@@ -292,6 +297,37 @@ public final class PacketListener implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBedEnter(PlayerBedEnterEvent event) {
+        PlayerData data = grantBedGrace(event.getPlayer());
+        if (data != null) {
+            data.inBed = true;
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBedLeave(PlayerBedLeaveEvent event) {
+        PlayerData data = grantBedGrace(event.getPlayer());
+        if (data != null) {
+            data.inBed = false;
+            data.lastSleepingTick = data.lastTick;
+        }
+    }
+
+    /** Both edges of a bed move the player without an input, so the state is rebuilt where they land. */
+    private PlayerData grantBedGrace(Player player) {
+        if (player == null) {
+            return null;
+        }
+        PlayerData data = players.get(player.getUniqueId());
+        if (data == null || !data.joined) {
+            return null;
+        }
+        data.lastPosition = null;
+        data.grantGrace(TELEPORT_GRACE_MILLIS);
+        return data;
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onTeleport(PlayerTeleportEvent event) {
         PlayerData data = players.get(event.getPlayer().getUniqueId());
         if (data == null) {
@@ -363,6 +399,10 @@ public final class PacketListener implements Listener {
             inspectMovement(event, player, packet);
         } else if (event.getPacket() instanceof ItemStackRequestPacket packet) {
             inventoryMoveCheck.handleRequest(playerData, packet, System.nanoTime());
+        } else if (event.getPacket() instanceof PlayerActionPacket packet) {
+            inspectPlayerAction(event, player, playerData, packet);
+        } else if (event.getPacket() instanceof InteractPacket packet) {
+            inspectInteract(event, player, playerData, packet);
         } else if (event.getPacket() instanceof InventoryTransactionPacket packet) {
             inspectBadSlot(event, player, playerData, packet);
             inspectPlaceReach(event, player, playerData, packet);
@@ -1558,6 +1598,39 @@ public final class PacketListener implements Listener {
         data.clearSpearLungeCandidate();
     }
 
+    /** Refuses a wake-up or a respawn the player's state cannot justify. */
+    private void inspectPlayerAction(PacketReceiveEvent event, Player player, PlayerData data,
+                                     PlayerActionPacket packet) {
+        PlayerActionType type = packet.getAction();
+        if (type == PlayerActionType.STOP_SLEEPING && !data.inBed && !player.isSleeping()
+                && !recentlySleeping(data)) {
+            fail(event, player, data, CheckType.BAD_PACKET_K, 2, "not asleep", true);
+            return;
+        }
+        if (type == PlayerActionType.RESPAWN && player.isAlive() && player.getHealth() > 0) {
+            fail(event, player, data, CheckType.BAD_PACKET_L, 2, "still alive", true);
+        }
+    }
+
+    /** Refuses an interaction whose target is unknown to both the server and the client. */
+    private void inspectInteract(PacketReceiveEvent event, Player player, PlayerData data,
+                                 InteractPacket packet) {
+        InteractPacket.Action action = packet.getAction();
+        if (action == InteractPacket.Action.OPEN_INVENTORY
+                || action == InteractPacket.Action.INVALID) {
+            return;
+        }
+        long target = packet.getTargetRuntimeID();
+        if (target == 0 || target == player.getId() || data.inGrace()) {
+            return;
+        }
+        if (player.getLevel().getEntity(target) != null
+                || data.clientEntities.view(target) != null) {
+            return;
+        }
+        fail(event, player, data, CheckType.BAD_PACKET_M, 2, "target=" + target, true);
+    }
+
     /** Grants grace when levitation ends, since the client falls back under gravity on its own. */
     private void trackLevitation(Player player, PlayerData data) {
         boolean levitating = player.hasEffect(EffectType.LEVITATION);
@@ -1853,6 +1926,12 @@ public final class PacketListener implements Listener {
         if (setback && cancel && MovementCheckSupport.isMovementCheck(check) && vl >= setbackThreshold) {
             scheduleMovementCorrection(player, data);
         }
+    }
+
+    /** Whether the player was asleep recently enough for a wake-up to be legitimate. */
+    private static boolean recentlySleeping(PlayerData data) {
+        return data.lastSleepingTick != Long.MIN_VALUE
+                && data.lastTick - data.lastSleepingTick < SLEEP_GRACE_TICKS;
     }
 
     /** Whether the player is gliding or landed from a glide within the last second. */

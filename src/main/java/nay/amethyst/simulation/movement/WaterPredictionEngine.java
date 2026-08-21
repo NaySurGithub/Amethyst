@@ -9,6 +9,7 @@ public final class WaterPredictionEngine extends PredictionEngine {
     private static final float DEPTH_STRIDER_DRAG = 0.54600006f;
     private static final float DEPTH_STRIDER_STEP = 0.33333334f;
     private static final float ASCENT = 0.04f;
+    private static final float ASCENT_MINIMUM_SUBMERSION = 0.4f;
     private static final float PUSH = 0.014f;
     private static final float LEDGE_CLIMB = 0.3f;
     private static final float BUBBLE_DOWNWARD_MAX = -0.3f;
@@ -33,7 +34,8 @@ public final class WaterPredictionEngine extends PredictionEngine {
         applyKnockback();
         applyFluidPush(fluid, PUSH);
 
-        if (state.pressingJump() || state.autoJumpingInWater()) {
+        if ((state.pressingJump() || state.autoJumpingInWater())
+                && fluid.submersion() > ASCENT_MINIMUM_SUBMERSION) {
             state.velocity(state.velocity().add(0.0f, ASCENT, 0.0f));
         }
 
