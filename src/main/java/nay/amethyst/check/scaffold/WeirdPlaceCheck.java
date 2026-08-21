@@ -72,14 +72,16 @@ public final class WeirdPlaceCheck {
             return null;
         }
 
+        //ong this shit is a crazy method
+        if (sent.getCount() <= 1) {
+            return null;
+        }
+
         Item inHand = player.getInventory().getItemInMainHand();
-        if (inHand == null || inHand.isNull()) {
-            return new Result("placed " + claimed + " with an empty hand");
+        if (inHand == null || inHand.isNull() || claimed.equals(inHand.getId())) {
+            return null;
         }
-        if (!claimed.equals(inHand.getId())) {
-            return new Result("placed " + claimed + " while holding " + inHand.getId());
-        }
-        return null;
+        return new Result("placed " + claimed + " while holding " + inHand.getId());
     }
 
     public record Result(String detail) {
