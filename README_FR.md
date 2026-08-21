@@ -98,14 +98,13 @@ le client l'a réellement vu.
 | `BreakReach-A` | Bloc cassé au-delà de la distance autorisée. |
 | `PlaceReach-A` | Bloc posé au-delà de cette même distance. |
 | `FastBreak-A` | Bloc détruit avant le temps de minage calculé par le serveur. |
-| `WeirdPlace-A` | Bloc posé contre quelque chose que le joueur ne regardait pas, ou sans le tenir. La pose est refusée. |
 | `Scaffold-A` | Vecteur de clic nul sur une pose initiale déclenchée par l'entrée joueur. |
 | `Cobweb-A` | Déplacement dans une toile plus rapide que son propre ralentissement ne l'autorise. |
 | `BadSlot-A` | Potion ou perle de l'Ender utilisée depuis un emplacement hors de la barre d'action. La transaction est refusée. |
 | `FastUse-A` | Un consommable terminé en moins de ticks qu'aucun aliment ou potion n'en demande. |
 | `InvMove-A` | Déplacement dirigé pendant une interaction d'inventaire. |
 | `BedrockTool-A` | L'identité du client correspond à un outil connu. |
-| `BadPacket-A…J` | Champs de paquet malformés ou impossibles. |
+| `BadPacket-A…Q` | Champs de paquet malformés ou impossibles : valeurs, états et identifiants que le protocole ne peut pas produire. Un bloc posé sans le regarder est également refusé ici. |
 
 Les paquets invalides sont annulés. Des violations de mouvement répétées provoquent un setback vers la dernière
 position vérifiée **au sol** ; un joueur qui n'en a pas encore atteint une reçoit seulement des alertes. `Timer`

@@ -94,14 +94,13 @@ acknowledgement-gated, so the simulation only adopts a change once the client ha
 | `BreakReach-A` | Block broken beyond the allowed distance. |
 | `PlaceReach-A` | Block placed beyond that same distance. |
 | `FastBreak-A` | Block destroyed before its server-calculated break time. |
-| `WeirdPlace-A` | A block placed against something the player was not looking at, or while not holding it. The placement is refused. |
 | `Scaffold-A` | Zero click vector on an initial player-input placement. |
 | `Cobweb-A` | Movement through a cobweb faster than its own slowdown allows. |
 | `BadSlot-A` | A potion or ender pearl used from a slot outside the hotbar. The transaction is refused. |
 | `FastUse-A` | A consumable finished in fewer ticks than any food or potion takes. |
 | `InvMove-A` | Directed movement during an inventory interaction. |
 | `BedrockTool-A` | The client identity matches a known tool. |
-| `BadPacket-A…J` | Malformed or impossible packet fields. |
+| `BadPacket-A…Q` | Malformed or impossible packet fields: values, states and identifiers the protocol cannot produce. A block placed without looking at it is refused here too. |
 
 Invalid packets are cancelled. Repeated movement violations cause a setback to the last verified ground
 position, and a player who has not reached one yet is only alerted on. `Timer` past a sustained run of
