@@ -13,17 +13,17 @@ public interface MovementWorldView {
 
     FluidState fluidState(FloatBox area);
 
-    /** Swim acceleration for this frame, which is what Depth Strider and Dolphin's Grace change. */
+    /** Swim acceleration for this frame. */
     float underwaterSpeed();
 
     boolean hasBambooNearby(FloatBox area);
 
     boolean hasScaffoldingIntersection(FloatBox area);
 
-    /** A piston is mid-stroke here, so the player is being displaced by the server, not by input. */
+    /** Whether a piston is mid-stroke in the area. */
     boolean hasMovingBlock(FloatBox area);
 
-    /** A boat or a minecart is close enough to carry or block the player, and it moves on its own. */
+    /** Whether a boat or minecart is close enough to carry or block the player. */
     boolean hasSolidEntityNearby(FloatBox area);
 
 

@@ -42,7 +42,7 @@ public final class ClientWorldTracker {
     public synchronized void applyLocal(int x, int y, int z, int layer, BlockFrame state) {
         Key key = new Key(x, y, z, layer);
         Update update = new Update(++sequence, state);
-        acknowledged.put(key, state);
+        acknowledged.remove(key);
         acknowledgedChanges.put(key, update);
         queued.remove(key);
         pending.remove(key);
@@ -70,7 +70,8 @@ public final class ClientWorldTracker {
     public synchronized BlockFrame resolve(int x, int y, int z, int layer, BlockFrame serverState) {
         Key key = new Key(x, y, z, layer);
         if (pending.containsKey(key)) {
-            return acknowledged.get(key);
+            BlockFrame previous = acknowledged.get(key);
+            return previous != null ? previous : serverState;
         }
         return acknowledged.getOrDefault(key, serverState);
     }

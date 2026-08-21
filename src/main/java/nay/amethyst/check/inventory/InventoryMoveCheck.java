@@ -47,7 +47,6 @@ public final class InventoryMoveCheck {
         double actual = Math.hypot(position.getX() - data.lastPosition.getX(),
                 position.getZ() - data.lastPosition.getZ());
         double passive = data.predictedVelocity == null ? 0 : data.predictedVelocity.horizontalLength();
-        // Momentum from ice, damage and explosions is not inventory movement input.
         return Math.max(0, actual - passive - 0.03);
     }
 

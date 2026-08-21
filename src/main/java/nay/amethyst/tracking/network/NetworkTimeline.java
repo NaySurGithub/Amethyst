@@ -38,7 +38,6 @@ public final class NetworkTimeline {
         long latencyAllowance = Math.max(0, serverTick - clientTick) + elapsedTicks;
         long regularAllowance = Math.max(0, allowedInputs) + elapsedTicks;
         allowedInputs = (int) Math.min(Integer.MAX_VALUE, Math.min(latencyAllowance, regularAllowance));
-        // Bedrock must always be able to deliver one frame for every server tick.
         allowedInputs = Math.max(1, allowedInputs);
     }
 
@@ -69,7 +68,7 @@ public final class NetworkTimeline {
         return total;
     }
 
-    /** Frames received since the last call, to be compared against the ticks that elapsed. */
+    /** Frames received since the last call. */
     public synchronized int drainInputCount() {
         int total = inputCount;
         inputCount = 0;
@@ -130,8 +129,6 @@ public final class NetworkTimeline {
         if (match == null) return List.of();
 
         stackLatencyNanos = Math.max(0, now - match.sentNanos());
-        // Re-anchor the client clock when a delayed response would otherwise leave
-        // permanent simulation credit after the connection recovers.
         if (clientTick < match.serverTick() || clientTick >= serverTick) clientTick = match.serverTick();
         return match.callbacks();
     }

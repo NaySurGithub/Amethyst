@@ -21,7 +21,6 @@ public record WorldFrame(
         Map<BlockPos, BlockFrame> blocks,
         BlockIndex index,
         Map<Long, EntityFrame> entities,
-        /** Boxes of the entities a player can stand on, flattened so a query walks a list, not a map. */
         List<Aabb> solidEntityBoxes,
         List<Aabb> collisions
 ) {

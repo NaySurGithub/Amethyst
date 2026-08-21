@@ -11,7 +11,6 @@ public final class NetworkCheckSupport {
         try {
             return Math.max(0, player.getPing());
         } catch (RuntimeException ignored) {
-            // The RakNet child channel may disappear while the last packet is being drained.
             return 0;
         }
     }

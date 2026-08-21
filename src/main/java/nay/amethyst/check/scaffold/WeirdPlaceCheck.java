@@ -8,10 +8,7 @@ import org.cloudburstmc.protocol.bedrock.data.payload.inventory.transaction.data
 import org.powernukkitx.Player;
 import org.powernukkitx.item.Item;
 
-/**
- * Refuses a placement made against a block the player is not looking at. The allowance is deliberately
- * wide, so only a placement clearly beside or behind the player is refused.
- */
+/** Refuses a placement made against a block the player is not looking at. */
 public final class WeirdPlaceCheck {
 
     private static final double MAXIMUM_ANGLE = 80.0;
@@ -60,7 +57,6 @@ public final class WeirdPlaceCheck {
         return new Result("angle=" + Math.round(angle) + " at " + block);
     }
 
-    /** The item the placement claims has to be the one actually in the player's hand. */
     private static Result inspectHeldItem(Player player, ItemUseInventoryTransaction transaction) {
         ItemData sent = transaction.getItem();
         if (sent == null || sent.getDefinition() == null) {

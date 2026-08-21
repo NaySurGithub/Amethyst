@@ -56,6 +56,7 @@ public final class MovementInputAdapter {
         flags.put(MovementInputFlag.SNEAK_DOWN, PlayerAuthInputData.SNEAK_DOWN);
         flags.put(MovementInputFlag.START_JUMPING, PlayerAuthInputData.START_JUMPING);
         flags.put(MovementInputFlag.JUMPING, PlayerAuthInputData.JUMPING);
+        flags.put(MovementInputFlag.AUTO_JUMPING_IN_WATER, PlayerAuthInputData.AUTO_JUMPING_IN_WATER);
         flags.put(MovementInputFlag.START_GLIDING, PlayerAuthInputData.START_GLIDING);
         flags.put(MovementInputFlag.STOP_GLIDING, PlayerAuthInputData.STOP_GLIDING);
         flags.put(MovementInputFlag.JUMP_PRESSED_RAW, PlayerAuthInputData.JUMP_PRESSED_RAW);

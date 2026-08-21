@@ -6,6 +6,7 @@ import nay.amethyst.history.model.BlockIndex;
 import nay.amethyst.history.model.BlockPos;
 import nay.amethyst.history.model.EntityFrame;
 import nay.amethyst.history.model.PhysicsFrame;
+import nay.amethyst.history.model.StairShapes;
 import nay.amethyst.history.model.WorldFrame;
 import nay.amethyst.prediction.common.Vec3;
 import nay.amethyst.tracking.world.ClientWorldTracker;
@@ -46,7 +47,6 @@ public final class CompensatedHistory {
     public synchronized void capture(Player player, long clientTick, Vec3 position, Vec3 velocity,
                                      float yaw, float pitch, boolean onGround, ClientWorldTracker clientWorld,
                                      ClientEntityTracker clientEntities) {
-        // Freeze nearby world state now; later block or attribute changes must not rewrite this tick.
         double feet = position.y() - player.getBaseOffset();
         int centerX = floor(position.x());
         int centerY = floor(feet);
@@ -116,7 +116,6 @@ public final class CompensatedHistory {
                 centerX + BLOCK_RADIUS + 1, centerY + 4, centerZ + BLOCK_RADIUS + 1);
         boolean walksOnPowderSnow = walksOnPowderSnow(player);
         Map<BlockPos, BlockFrame> blocks = new HashMap<>();
-        List<Aabb> collisions = new ArrayList<>();
         for (int x = centerX - BLOCK_RADIUS; x <= centerX + BLOCK_RADIUS; x++) {
             for (int z = centerZ - BLOCK_RADIUS; z <= centerZ + BLOCK_RADIUS; z++) {
                 for (int y = centerY - 2; y <= centerY + 3; y++) {
@@ -127,10 +126,10 @@ public final class CompensatedHistory {
                     BlockFrame combined = BlockFrame.combine(primaryFrame, extraFrame);
                     if (combined == null || !combined.relevant()) continue;
                     blocks.put(new BlockPos(x, y, z), combined);
-                    collisions.addAll(combined.collisions());
                 }
             }
         }
+        reshapeStairs(blocks);
         cachedLevel = levelName;
         cachedX = centerX;
         cachedY = centerY;
@@ -139,7 +138,19 @@ public final class CompensatedHistory {
         cachedArea = area;
         cachedBlocks = Collections.unmodifiableMap(blocks);
         cachedIndex = BlockIndex.of(cachedBlocks);
-        cachedCollisions = List.copyOf(collisions);
+        cachedCollisions = orderedCollisions(blocks);
+    }
+
+    /** Recomputes stair collision boxes once the whole volume is captured. */
+    private static void reshapeStairs(Map<BlockPos, BlockFrame> blocks) {
+        StairShapes.Neighbours neighbours = (x, y, z) -> blocks.get(new BlockPos(x, y, z));
+        for (Map.Entry<BlockPos, BlockFrame> entry : blocks.entrySet()) {
+            BlockFrame frame = entry.getValue();
+            if (frame.stair() == null) continue;
+            BlockPos position = entry.getKey();
+            entry.setValue(frame.withCollisions(StairShapes.collisions(position.x(), position.y(),
+                    position.z(), frame.stair(), neighbours)));
+        }
     }
 
     private void applyWorldChanges(Player player, ClientWorldTracker clientWorld,
@@ -166,6 +177,7 @@ public final class CompensatedHistory {
             else updated.put(position, combined);
         }
         if (updated != null) {
+            reshapeStairs(updated);
             cachedBlocks = Collections.unmodifiableMap(updated);
             cachedIndex = BlockIndex.of(cachedBlocks);
             cachedCollisions = orderedCollisions(updated);

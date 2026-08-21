@@ -23,7 +23,8 @@ public record AmethystSettings(
         double combatCloseRangeAngle,
         double blocksMaxReach,
         long blocksBreakLeniencyMs,
-        double setbackViolations
+        double setbackViolations,
+        boolean devLogs
 ) {
     public static AmethystSettings load(Config config) {
         return new AmethystSettings(
@@ -47,6 +48,7 @@ public record AmethystSettings(
                 config.getDouble("combat.close-range-angle", 60),
                 config.getDouble("blocks.max-reach", 7),
                 config.getLong("blocks.break-leniency-ms", 75),
-                config.getDouble("setback-violations", 2.0));
+                config.getDouble("setback-violations", 2.0),
+                config.getBoolean("dev-logs", false));
     }
 }

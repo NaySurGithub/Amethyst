@@ -20,5 +20,6 @@ public enum MovementInputFlag {
     JUMPING,
     START_GLIDING,
     STOP_GLIDING,
-    JUMP_PRESSED_RAW
+    JUMP_PRESSED_RAW,
+    AUTO_JUMPING_IN_WATER
 }

@@ -6,10 +6,7 @@ import org.powernukkitx.event.Cancellable;
 import org.powernukkitx.event.HandlerList;
 import org.powernukkitx.event.player.PlayerEvent;
 
-/**
- * Fired whenever a check flags a player, before the alert is sent. Cancelling it suppresses the alert
- * and the violation, which is how another plugin exempts a case Amethyst cannot know about.
- */
+/** Fired when a check flags a player, before the alert is sent. Cancelling suppresses the alert. */
 public class PlayerViolationEvent extends PlayerEvent implements Cancellable {
 
     private static final HandlerList handlers = new HandlerList();

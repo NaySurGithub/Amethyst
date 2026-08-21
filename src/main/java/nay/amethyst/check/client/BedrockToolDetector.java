@@ -4,10 +4,7 @@ import org.cloudburstmc.protocol.bedrock.data.BuildPlatform;
 import org.cloudburstmc.protocol.bedrock.data.skin.ImageData;
 import org.powernukkitx.Player;
 
-/**
- * Matches the identity a known tool sends: a fixed device model, an empty geometry engine version and
- * a fully black skin. Any one of them can belong to a real player; the three together do not.
- */
+/** Matches the client identity a known tool sends. */
 public final class BedrockToolDetector {
 
     private static final String DEVICE_MODEL = "SM-G970F";

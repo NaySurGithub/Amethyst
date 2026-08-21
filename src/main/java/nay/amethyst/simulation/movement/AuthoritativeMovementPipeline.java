@@ -1,7 +1,6 @@
 package nay.amethyst.simulation.movement;
 
 public final class AuthoritativeMovementPipeline {
-    /** Past this the two are not describing the same movement, so the velocity is stale as well. */
     private static final float DESYNC_OFFSET = 8.0f;
 
     private boolean impulseDeferred;
@@ -14,7 +13,7 @@ public final class AuthoritativeMovementPipeline {
                                          MovementOptions options) {
         this.state = state;
         this.options = options;
-        this.simulator = new MovementSimulator(options.simulateWater());
+        this.simulator = new MovementSimulator();
     }
 
     public synchronized MovementPipelineResult handle(MovementInputFrame input,
@@ -32,29 +31,24 @@ public final class AuthoritativeMovementPipeline {
 
         state.tickEffects();
         state.updateInput(input);
+        boolean wasGliding = state.gliding();
         impulseDeferred = false;
         MovementSimulator.SimulationResult simulation = simulateBestBranch(world, hadTeleport,
                 hadKnockback);
 
-        // kept before the re-anchor below, which would otherwise report the client's own position
-        // back as the prediction and make every alert unreadable
         FloatVector predictedPosition = state.position();
         FloatVector positionDifference = state.position().subtract(state.client().position());
         FloatVector velocityDifference = state.velocity().subtract(state.client().velocity());
         boolean needsCorrection = positionDifference.length() > options.correctionThreshold();
         boolean correctionRequired = simulation.reliable()
                 && !simulation.inFluid()
+                && !wasGliding
                 && needsCorrection
                 && state.pendingTeleports() == 0
                 && !hadTeleport
                 && !rawJumpGrace
                 && !hadKnockback;
 
-        // The offset has to mean "how far this tick's move missed", not "how far the server has
-        // drifted since the player logged in". Without re-anchoring, one unexplained tick stays in
-        // the position for hundreds of ticks and every one of them is counted again as a fresh
-        // failure. The simulation restarts from where the client says it is, so the next tick
-        // measures that tick alone; a cheat still has to explain a residual on every single tick.
         boolean anchored = simulation.reliable() && !hadTeleport && !hadKnockback
                 && state.pendingTeleports() == 0 && state.pendingCorrections() == 0
                 && !state.immobile();
@@ -62,10 +56,8 @@ public final class AuthoritativeMovementPipeline {
             state.position(state.client().position());
         }
 
-        // Only an impulse the simulation could not know about justifies taking the client's velocity.
-        // Doing it whenever the prediction missed turns the simulation into a mirror of the client:
-        // it would adopt a cheat's own velocity and then predict the cheat correctly.
         if (hadTeleport || hadKnockback || impulseDeferred
+                || wasGliding && anchored
                 || positionDifference.length() > DESYNC_OFFSET) {
             state.velocity(state.client().velocity());
         }
@@ -99,15 +91,7 @@ public final class AuthoritativeMovementPipeline {
     }
 
     /**
-     * The client tells us a jump or a sprint started, but the flag and the tick it applies to do not
-     * always line up: a jump can be reported the tick before the client actually leaves the ground,
-     * and a sprint can be dropped or held one tick longer than the server believes. Simulating only
-     * the literal reading of the input makes the server miss a real 0.42 jump, which shows up as a
-     * large offset on a completely legitimate move.
-     *
-     * <p>So the ambiguous ticks are simulated both ways and the branch landing closest to the client
-     * wins. A cheat gains nothing: every branch is still a legal move, so the residual offset it has
-     * to explain is unchanged.
+     * Simulates the ambiguous jump and sprint branches and keeps the one closest to the client.
      */
     private MovementSimulator.SimulationResult simulateBestBranch(MovementWorldView world,
                                                                   boolean hadTeleport,
@@ -122,8 +106,6 @@ public final class AuthoritativeMovementPipeline {
         float bestOffset = offsetFromClient();
         AuthoritativeMotionState.MotionSnapshot best = state.snapshot();
 
-        // an impulse spent a tick before the client applied it moves the simulation a whole impulse
-        // ahead, so the tick is also tried without it and the impulse stays armed if that fits better
         if (hadKnockback) {
             state.restore(start);
             if (!state.deferKnockback()) {
@@ -141,15 +123,13 @@ public final class AuthoritativeMovementPipeline {
             }
         }
 
-        // A branch is only worth simulating where flipping the input could change the outcome. A jump
-        // needs ground and no cooldown to do anything, and sprint only feeds the movement input and
-        // the jump boost, so with neither of those the two branches are identical by construction.
-        boolean couldJump = start.onGround() && start.jumpDelay() == 0;
+        boolean clientGround = start.onGround() || state.client().verticalCollision();
+        boolean couldJump = clientGround && start.jumpDelay() == 0;
         boolean hasMovementInput = state.impulseForward() * state.impulseForward()
                 + state.impulseSideways() * state.impulseSideways() >= 1.0E-4f;
 
         boolean jumpAmbiguous = couldJump
-                && state.jumping() != (state.pressingJump() && start.onGround());
+                && state.jumping() != (state.pressingJump() && clientGround);
         boolean sprintAmbiguous = couldJump && state.jumping()
                 || hasMovementInput && state.sprinting() != state.pressingSprint();
         if (!jumpAmbiguous && !sprintAmbiguous) {
@@ -169,7 +149,11 @@ public final class AuthoritativeMovementPipeline {
                 state.deferKnockback();
             }
             if (flipJump) {
-                state.jumping(!start.jumping());
+                boolean jumping = !start.jumping();
+                state.jumping(jumping);
+                if (jumping && !start.onGround()) {
+                    state.onGround(true);
+                }
             }
             if (flipSprint) {
                 state.sprinting(!start.sprinting());
@@ -189,7 +173,7 @@ public final class AuthoritativeMovementPipeline {
         return result;
     }
 
-    /** Returns the block id itself, so nothing is formatted on a tick that never raises an alert. */
+    /** Id of the block the simulation believes is holding the player up. */
     private String describeSupport(MovementWorldView world) {
         if (!state.hasSupportingBlock()) {
             return "none";
@@ -205,7 +189,15 @@ public final class AuthoritativeMovementPipeline {
         int y = (int) Math.floor(feet.y() - 0.1f);
         int z = (int) Math.floor(feet.z());
         FloatBox cell = new FloatBox(x, y, z, x + 1.0f, y + 1.0f, z + 1.0f);
-        return world.block(x, y, z).id() + "@" + y + "/" + world.collisionBoxes(cell).size();
+        String below = world.block(x, y, z).id() + "@" + y + "/" + world.collisionBoxes(cell).size();
+        if (state.wearingElytra() || state.gliding()) {
+            below += " glide=" + state.gliding() + "/" + state.wearingElytra();
+        }
+        FluidState fluid = world.fluidState(state.clientBoundingBox());
+        if (!fluid.water() && !fluid.lava()) {
+            return below;
+        }
+        return below + " sub=" + String.format("%.3f", fluid.submersion());
     }
 
     private float offsetFromClient() {

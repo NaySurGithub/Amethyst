@@ -76,9 +76,11 @@ public final class AmethystPlugin extends PluginBase {
         getServer().getPluginManager().callEvent(event);
         if (event.isCancelled()) return;
         if (!alertsEnabled) return;
-        String message = alertFormatter.format(suspect, check, vl, detail);
+        String shown = settings().devLogs() ? detail : "";
+        String message = alertFormatter.format(suspect, check, vl, shown);
         getLogger().warning("[Amethyst] " + suspect.getName() + " failed " + check.id()
-                + " (VL " + String.format("%.1f", vl) + ") " + detail);
+                + " (VL " + String.format("%.1f", vl) + ")"
+                + (shown.isEmpty() ? "" : " " + shown));
         for (Player player : getServer().getOnlinePlayers().values()) {
             if (player.hasPermission("amethyst.alerts")) player.sendMessage(message);
         }

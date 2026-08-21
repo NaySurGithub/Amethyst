@@ -38,11 +38,13 @@ Requires PowerNukkitX and Java 21.
 
 ### The simulation
 
-`MovementSimulator` carries a server-owned motion state forward through the real Bedrock tick order: friction
-from the block underfoot, input acceleration, jump, climbables, cobwebs, collision, then gravity. The constants
-are the game's own - `0.91` air friction, `0.98` gravity multiplier, `0.5625` step height - and the trigonometry
-goes through a reimplementation of Mojang's 65536-entry sine table, so the float error matches the client
-rather than merely being close to it.
+`MovementSimulator` picks the engine that matches the medium the player is in - ground and air, water, lava,
+gliding - and hands it the whole tick. Each engine carries a server-owned motion state forward through the
+real Bedrock tick order for that medium: on the ground that is friction from the block underfoot, input
+acceleration, jump, climbables, cobwebs, collision, then gravity; in water it is fluid drag, depth strider and
+a gravity a sixteenth of its usual pull. The constants are the game's own - `0.91` air friction, `0.98` gravity
+multiplier, `0.5625` step height - and the trigonometry goes through a reimplementation of Mojang's
+65536-entry sine table, so the float error matches the client rather than merely being close to it.
 
 It is authoritative, not observational: the inbound packet is rewritten with the simulated position before the
 server sees it.
@@ -100,7 +102,9 @@ client has actually seen it.
 | `Timer` | More client frames than ticks elapsed, which is a client running its own simulation fast. |
 | `Vehicle-A` | Boat, minecart or mount movement that did not match its own prediction. The vehicle is sent back, not its rider. |
 | `NoFall-A` | Fall damage that did not match the simulated fall. |
-| `GroundSpoof-A` | The client claimed a vertical collision with nothing under it. |
+| `GroundSpoof-A` | The client claimed a vertical collision with nothing under it. Skipped over partial blocks and while wearing an elytra. |
+| `Sprint-A…C` | A sprint the client cannot legitimately hold: too little food, an item in use, or started while blinded. |
+| `Elytra-A…B` | A glide started while riding, or restarted within two ticks of the last one. |
 | `KillAura-A` | Invalid attack target or attack sequence. |
 | `Reach-A` | Target attacked beyond the allowed reach, measured against its rewound hitbox. |
 | `Hitbox-A` | The sight ray never intersected the target. Players only, since a mob's rewound box is smoothed too far to raycast against. |
@@ -109,13 +113,16 @@ client has actually seen it.
 | `FastBreak-A` | Block destroyed before its server-calculated break time. |
 | `WeirdPlace-A` | A block placed against something the player was not looking at, or while not holding it. The placement is refused. |
 | `Scaffold-A` | Zero click vector on an initial player-input placement. |
+| `Cobweb-A` | Movement through a cobweb faster than its own slowdown allows. |
+| `BadSlot-A` | A potion or ender pearl used from a slot outside the hotbar. The transaction is refused. |
 | `FastUse-A` | A consumable finished in fewer ticks than any food or potion takes. |
 | `InvMove-A` | Directed movement during an inventory interaction. |
 | `BedrockTool-A` | The client identity matches a known tool: fixed device model, empty geometry version and a blank skin. |
 | `BadPacket-A…J` | Malformed or impossible packet fields: non-finite values, stale ticks, invalid slots, faces, channels and enums. |
 
 Invalid packets are cancelled. Repeated movement violations cause a setback to the last verified ground
-position, and a player who has not reached one yet is only alerted on. `Timer` past fifteen violations,
+position - never while in a fluid - and a player who has not reached one yet is only alerted on. `Timer`
+past fifteen violations,
 `BedrockTool-A` on sight, and `BadPacket-D` and `BadPacket-E` kick; nothing else does, and Amethyst never bans.
 
 ## 🔌 For developers
@@ -129,6 +136,7 @@ another plugin exempts a case Amethyst cannot know about.
 | Setting | Purpose |
 | --- | --- |
 | `alerts` | Enables violation alerts. |
+| `dev-logs` | Adds the offset, both positions and the simulation state to every alert. Off by default; needed to report a false positive. |
 | `updates.check` | Checks for a newer release on startup. |
 | `setback-violations` | Violations required before a movement setback. |
 | `max-packet-actions` | Maximum block actions accepted in one input packet. |
@@ -170,29 +178,44 @@ and they are listed because a cheat that knows about them can use them:
 
 | Situation | Why |
 | --- | --- |
-| Water | The swim model is written but unverified, and off behind `MovementOptions.simulateWater`. |
-| Lava | Not modelled. |
+| Swimming | The swim pose is where the fluid model drifts furthest, so it is skipped - but only while water is actually there, so claiming to swim in mid-air buys nothing. |
+| The second after levitation ends | The client resumes falling on its own while the server still holds the effect's vertical velocity. |
 | Bamboo, scaffolding | Client-side behaviour the simulation does not reproduce. |
 | Pistons | A player being pushed is displaced by the server, not by their input. |
 | Riptide | A ~3 block/tick burst the simulation cannot produce. |
 | Inside a solid block | How the client pushes out of a block placed on it is its own affair. |
 | Within 1.5 blocks of a boat or minecart | It floats and moves on its own, and its tracked position is a tick behind. |
 | Teleports, respawns, joins | The state is rebuilt at the destination, with two to three seconds of grace. |
+| A movement speed above 0.5 | The player crosses more ground in a tick than the captured snapshot holds, so the simulation would be walking through blocks it never saw. |
+
+Water, lava and elytra flight are simulated rather than skipped, each by its own engine, but none of
+them triggers a setback and their tolerance is eight times the usual one. Gliding keeps that
+treatment for a second after it ends, since a landing carries the flight's velocity into the first
+ticks on the ground. Below that speed cap, the tolerance also
+scales with whatever movement speed the server granted, so a speed potion widens the margin by
+exactly as much as it widens the step.
 
 Boats, minecarts and shulkers are real collisions rather than holes: their type is carried through the entity
 tracker so a player stands on them the way the client does.
 
-Waterwalk is still caught despite the water exemption, because the cheat keeps the player *above* the surface,
-where no fluid intersects their box.
+Waterwalk is still caught despite the swimming exemption, because the cheat keeps the player *above* the
+surface, where no fluid intersects their box and the ground engine runs as usual.
 
 ## 🚧 Not finished
 
-- **Stairs and slabs.** The simulation falls through the upper half of a stair block: it stops at 5.5 on a
-  block whose step reaches 6.0, so a player standing there is corrected forever. `BlockStairs` returns two
-  collision boxes and only one survives; which of the capture or the collision engine loses it is still open.
-- **`GroundSpoof-A`, `FastUse-A`, `WeirdPlace-A`, `PlaceReach-A` and `BedrockTool-A` are new** and have not
-  been through a false-positive pass. `WeirdPlace-A` comparing the held item against the one the placement
-  claims is the most likely to be noisy, since a hotbar switch can land mid-transaction.
+- **The water model is young.** It was written against a working implementation and its constants are the
+  game's own, but it went live in a single sitting. Swimming is skipped for that reason; wading is not.
+- **Stair corners are derived, not read.** The server models every stair as straight, so the shape is
+  recomputed from the neighbours the way the game does it. That code has not met a real staircase yet.
+- **Elytra flight is the least settled part of the model.** The formula matches a working
+  implementation term for term, yet it drifts about a block a tick, which is why gliding neither
+  triggers a setback nor uses the normal tolerance. The cause is upstream of the formula and is not
+  found yet.
+- **`Cobweb-A`, `BadSlot-A`, `Sprint-A…C`, `Elytra-A…B`, `GroundSpoof-A`, `FastUse-A`,
+  `WeirdPlace-A`, `PlaceReach-A` and `BedrockTool-A` are new** and have not been through a
+  false-positive pass. The `Sprint` and `Elytra` families were derived from a Java-edition anti-cheat
+  and only `Sprint-A` is confirmed against the server's own source, so the rest may not describe
+  Bedrock at all.
 - **No tests.** The physics is exactly the kind of code a test suite would pin down, and there is none.
 - **No replay harness.** Every diagnosis today needs a server restart and a human reproducing the bug. Recording
   inputs and world frames to disk, and replaying them offline, would turn a diagnosis cycle from minutes into
@@ -202,8 +225,9 @@ where no fluid intersects their box.
 
 ## 🐛 Reporting a false positive
 
-The alert line is the important part. It carries the offset, both positions, the ground flag, what the
-simulation believed was supporting the player, its vertical velocity, and the tick:
+Set `dev-logs: true` first - without it an alert names only the check, which is unreportable. The detailed
+line carries the offset, both positions, the ground flag, what the simulation believed was supporting the
+player, its vertical velocity, and the tick:
 
 ```
 failed Simulation (VL 1.0) offset=0.420 client=[…] predicted=[…] ground=true
@@ -212,7 +236,8 @@ failed Simulation (VL 1.0) offset=0.420 client=[…] predicted=[…] ground=true
 
 `support` is what the simulation believed was holding the player up, `below` is what the captured frame holds
 under them and how many collision boxes it kept for it, and `kb-age` is how long ago an impulse reached the
-simulation.
+simulation. In a fluid the line also carries `sub`, how far the surface stands above the player's feet, and
+the word `fluid` when the tick ran through a fluid engine.
 
 Read it before reporting it - the shape of the numbers usually names the bug:
 

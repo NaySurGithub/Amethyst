@@ -49,6 +49,10 @@ public final class AuthoritativeMotionState {
     private boolean teleportSmoothed;
     private boolean sprinting;
     private boolean pressingSprint;
+    private boolean swimming;
+    private boolean stopSwimming;
+    private boolean autoJumpingInWater;
+    private int depthStrider;
     private boolean serverSprint;
     private boolean serverSprintApplied = true;
     private boolean serverUpdatedSpeed;
@@ -96,6 +100,13 @@ public final class AuthoritativeMotionState {
         rotation = input.rotation();
         pressingSneak = input.has(MovementInputFlag.SNEAKING);
         pressingSprint = input.has(MovementInputFlag.SPRINT_DOWN);
+        stopSwimming = input.has(MovementInputFlag.STOP_SWIMMING);
+        autoJumpingInWater = input.has(MovementInputFlag.AUTO_JUMPING_IN_WATER);
+        if (input.has(MovementInputFlag.START_SWIMMING)) {
+            swimming = true;
+        } else if (stopSwimming) {
+            swimming = false;
+        }
 
         boolean startSprint = input.has(MovementInputFlag.START_SPRINTING);
         boolean stopSprint = input.has(MovementInputFlag.STOP_SPRINTING);
@@ -287,22 +298,12 @@ public final class AuthoritativeMotionState {
         return ticksSinceKnockback == 0;
     }
 
-    /**
-     * Holds an impulse back one tick. The client applies a server impulse when the packet reaches
-     * it, which is not always the tick the server armed it on, and spending it early moves the
-     * simulation a whole impulse ahead of the player.
-     */
-    /**
-     * Holding an impulse back is only ever a few ticks of latency. Left unbounded, a client that never
-     * applies one keeps winning the deferred branch, and the simulation ends up agreeing that no
-     * knockback happened at all.
-     */
+    /** Holds an impulse back one tick, up to {@link #MAX_KNOCKBACK_DEFERRALS} times. */
     public boolean deferKnockback() {
         if (ticksSinceKnockback != 0 || knockbackDeferrals >= MAX_KNOCKBACK_DEFERRALS) {
             return false;
         }
         knockbackDeferrals++;
-        // finishInput advances this by one, so -1 leaves the impulse armed for the next tick
         ticksSinceKnockback = -1;
         return true;
     }
@@ -505,6 +506,26 @@ public final class AuthoritativeMotionState {
         return sprinting;
     }
 
+    public boolean swimming() {
+        return swimming;
+    }
+
+    public boolean stopSwimming() {
+        return stopSwimming;
+    }
+
+    public boolean autoJumpingInWater() {
+        return autoJumpingInWater;
+    }
+
+    public int depthStrider() {
+        return depthStrider;
+    }
+
+    public void depthStrider(int value) {
+        depthStrider = value;
+    }
+
     public boolean pressingSprint() {
         return pressingSprint;
     }
@@ -521,12 +542,10 @@ public final class AuthoritativeMotionState {
         return jumping;
     }
 
-    /** Forces the jump branch of a candidate simulation; the caller restores the snapshot after. */
     public void jumping(boolean value) {
         jumping = value;
     }
 
-    /** Forces the sprint branch of a candidate simulation, speeds included. */
     public void sprinting(boolean value) {
         sprinting = value;
         airSpeed = value ? 0.026f : 0.02f;
@@ -824,11 +843,7 @@ public final class AuthoritativeMotionState {
         snapshot.applyTo(this);
     }
 
-    /**
-     * Everything a single simulated tick may mutate, so a candidate branch can be tried and rolled
-     * back. Teleport and knockback state is deliberately excluded: branches are only ever tried on
-     * ticks without either.
-     */
+    /** Everything a simulated tick may mutate, excluding teleport and knockback state. */
     public static final class MotionSnapshot {
         private final FloatVector position;
         private final FloatVector lastPosition;

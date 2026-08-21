@@ -33,42 +33,31 @@ public final class PlayerData {
     private long movementCorrectionDeadline;
     private boolean simulationCorrectionEpisode;
     public int simulationMismatchFrames;
-    /** Excess simulation offset accumulated over consecutive ticks, decayed by matching ticks. */
     public double simulationOffsetBuffer;
-    /** This tick moved roughly along a server impulse without matching it closely. */
     public boolean nearServerMotionTick;
-    /**
-     * A movement packet was refused, so the client moved somewhere the simulation never saw. The
-     * next one it does see carries that whole gap, which is our blindness rather than the player's
-     * doing.
-     */
     public volatile boolean movementPacketDropped;
-    /** Set once a kick is on its way, so a packet flood does not queue hundreds of them. */
     public volatile boolean kickScheduled;
-    /** Set by a melee hit, so only that knockback is measured and not a projectile or an explosion. */
     public volatile boolean meleeKnockbackPending;
-    /** The impulse the server sent for a melee hit, and how many ticks are left to observe it. */
     public Vec3 expectedMeleeKnockback;
     public int meleeKnockbackTicks;
     public double meleeKnockbackObserved;
     public double meleeKnockbackExpected;
     public double velocityBuffer;
-    /** Client frames received beyond the tick budget, accumulated and decayed like the others. */
     public double timerBuffer;
     public int timerWarmup;
     public int timerInputs;
     public int timerTicks;
-    /** Consecutive ticks the client claimed ground with nothing under it. */
     public int groundSpoofBuffer;
-    /** Client tick a consumable started being used, to catch one finished in no time at all. */
+    public int cobwebBuffer;
+    public int sprintFoodBuffer;
+    public int sprintUseBuffer;
+    public boolean wasSprinting;
+    public boolean wasLevitating;
+    public long lastGlideTick = Long.MIN_VALUE;
+    public long lastGlideStartTick = Long.MIN_VALUE;
     public long itemUseStartTick = Long.MIN_VALUE;
-    /**
-     * The last place the player stood that the simulation agreed with. Since the simulation restarts
-     * from the client every tick, its own position is never more than one tick away from wherever the
-     * player claims to be, so it cannot serve as the target of a correction.
-     */
+    /** Last ground position the simulation agreed with, and the target of a setback. */
     public Vec3 lastVerifiedPosition;
-    /** Same idea for the vehicle: correcting a rider without moving what carries them does nothing. */
     public Vec3 lastVerifiedVehiclePosition;
     private DirectSetback directSetback;
     private int pendingTeleportAcks;
@@ -253,7 +242,6 @@ public final class PlayerData {
     public synchronized void acknowledgeVelocities(List<Vec3> velocities) {
         if (pendingVelocityAcks > 0) pendingVelocityAcks--;
         if (velocities.isEmpty()) return;
-        // SetActorMotion replaces the client's current motion; only the final packet in the ACK batch survives.
         velocityImpulses.clear();
         enqueueVelocity(velocities.get(velocities.size() - 1));
     }
@@ -323,11 +311,7 @@ public final class PlayerData {
         return serverMotionCandidates().stream().anyMatch(candidate -> candidate.distance(velocity) <= 0.01);
     }
 
-    /**
-     * Only a close match skips the checks outright. Server motion now reaches the simulator as
-     * knockback, so this is a fallback for the few impulses that never become a packet, not the
-     * general way movement gets excused.
-     */
+    /** Consumes a server impulse candidate closely matching the observed movement. */
     public synchronized boolean claimMatchingServerMotion(Vec3... observedMotions) {
         for (Vec3 candidate : serverMotionCandidates()) {
             for (Vec3 observed : observedMotions) {
@@ -340,11 +324,7 @@ public final class PlayerData {
         return false;
     }
 
-    /**
-     * A move heading roughly the right way for a server impulse without matching it closely. The
-     * candidates are left armed and nothing is skipped; the caller only loosens its threshold, so a
-     * player pushed while still steering is not punished for the difference.
-     */
+    /** Whether the movement heads roughly along an armed impulse, without consuming it. */
     public synchronized boolean nearServerMotion(Vec3... observedMotions) {
         for (Vec3 candidate : serverMotionCandidates()) {
             for (Vec3 observed : observedMotions) {
@@ -410,6 +390,13 @@ public final class PlayerData {
         timerInputs = 0;
         timerTicks = 0;
         groundSpoofBuffer = 0;
+        cobwebBuffer = 0;
+        sprintFoodBuffer = 0;
+        sprintUseBuffer = 0;
+        wasSprinting = false;
+        wasLevitating = false;
+        lastGlideTick = Long.MIN_VALUE;
+        lastGlideStartTick = Long.MIN_VALUE;
         itemUseStartTick = Long.MIN_VALUE;
         directSetback = null;
         resetMovementPipeline();

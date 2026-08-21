@@ -1,4 +1,7 @@
 alerts: true
+# Adds the offset, both positions and the simulation state to every alert. Needed to report a false
+# positive, noisy for everyday use.
+dev-logs: false
 updates:
   check: true
 setback-violations: 2.0

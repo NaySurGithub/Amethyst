@@ -5,6 +5,7 @@ import org.powernukkitx.block.Block;
 import org.powernukkitx.block.BlockBubbleColumn;
 import org.powernukkitx.block.BlockFenceGate;
 import org.powernukkitx.block.BlockLiquid;
+import org.powernukkitx.block.BlockStairs;
 import org.powernukkitx.math.AxisAlignedBB;
 
 import java.util.ArrayList;
@@ -19,7 +20,8 @@ public record BlockFrame(
         double fluidHeight,
         Vec3 flow,
         int bubbleDirection,
-        List<Aabb> collisions
+        List<Aabb> collisions,
+        StairFrame stair
 ) {
     private static final float MUD_SINK = 0.125f;
 
@@ -27,13 +29,8 @@ public record BlockFrame(
         collisions = List.copyOf(collisions);
     }
 
-    /**
-     * Air has no collision box, no fluid and no friction of its own, so its frame is the same
-     * everywhere. Most of a captured volume is air, and rebuilding that constant for each cell is
-     * the bulk of a snapshot's cost.
-     */
     private static final BlockFrame AIR = new BlockFrame("minecraft:air", 0.6, false, false, false,
-            0, Vec3.ZERO, 0, List.of());
+            0, Vec3.ZERO, 0, List.of(), null);
 
     public static BlockFrame capture(Block block) {
         return capture(block, false);
@@ -45,8 +42,6 @@ public record BlockFrame(
         }
 
         String blockId = block.getId();
-        // the server hands out a full cube for powder snow, but the client walks through it unless it
-        // is wearing leather boots, and it sinks 0.125 into mud
         boolean powderSnow = blockId.contains("powder_snow");
         float topInset = blockId.equals("minecraft:mud") ? MUD_SINK : 0.0f;
 
@@ -74,8 +69,10 @@ public record BlockFrame(
             fluidHeight = 1;
         }
         int bubble = block instanceof BlockBubbleColumn column ? (column.isDragDown() ? -1 : 1) : 0;
+        StairFrame stair = block instanceof BlockStairs stairs
+                ? new StairFrame(stairs.getBlockFace(), stairs.isUpsideDown()) : null;
         return new BlockFrame(block.getId(), movementFriction(block), water, lava,
-                block.canBeClimbed(), fluidHeight, flow, bubble, collisions);
+                block.canBeClimbed(), fluidHeight, flow, bubble, collisions, stair);
     }
 
     public static double movementFriction(Block block) {
@@ -94,7 +91,12 @@ public record BlockFrame(
                 Math.max(primary.fluidHeight, extra.fluidHeight),
                 extra.flow.lengthSquared() > 0 ? extra.flow : primary.flow,
                 extra.bubbleDirection != 0 ? extra.bubbleDirection : primary.bubbleDirection,
-                primary.collisions);
+                primary.collisions, primary.stair);
+    }
+
+    public BlockFrame withCollisions(List<Aabb> collisions) {
+        return new BlockFrame(id, friction, water, lava, climbable, fluidHeight, flow,
+                bubbleDirection, collisions, stair);
     }
 
     public boolean relevant() {

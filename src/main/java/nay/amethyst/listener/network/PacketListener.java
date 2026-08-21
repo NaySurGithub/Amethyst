@@ -43,6 +43,7 @@ import org.cloudburstmc.protocol.bedrock.data.BuildPlatform;
 import org.cloudburstmc.protocol.bedrock.data.InputMode;
 import org.cloudburstmc.protocol.bedrock.data.GameType;
 import org.cloudburstmc.protocol.bedrock.data.inventory.ContainerId;
+import org.cloudburstmc.protocol.bedrock.data.inventory.ItemData;
 import org.cloudburstmc.protocol.bedrock.data.PredictionType;
 import org.cloudburstmc.protocol.bedrock.data.payload.move.PositionMode;
 import org.cloudburstmc.protocol.bedrock.data.payload.inventory.transaction.ItemUseActionType;
@@ -111,17 +112,14 @@ import org.powernukkitx.registry.Registries;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public final class PacketListener implements Listener {
     private static final double BURST_MATCH_DISTANCE = 0.35;
-    /** Join and respawn drop the player in mid-air before the first input arrives. */
     private static final long GRACE_MILLIS = 2000;
-    /** A spoofed client tick is cheap to send, so it is only worth kicking once it is clearly repeated. */
     private static final double BAD_PACKET_D_KICK_VIOLATIONS = 35.0;
-    /** A teleport can drop the player somewhere they then fall from, which outlasts the usual grace. */
     private static final long TELEPORT_GRACE_MILLIS = 3000;
-    /** Beyond this, one tick of movement cannot be the explanation. */
     private static final double DESYNC_OFFSET = 8.0;
     private static final int VELOCITY_OBSERVE_TICKS = 4;
     private static final double VELOCITY_MINIMUM_RATIO = 0.5;
@@ -130,6 +128,22 @@ public final class PacketListener implements Listener {
     private static final double VELOCITY_MINIMUM_PUSH = 0.15;
     private static final double VELOCITY_MAXIMUM_PUSH = 1.5;
     private static final long IMPULSE_TOLERANCE_TICKS = 30;
+    private static final double DEFAULT_MOVEMENT_SPEED = 0.1;
+    private static final int HOTBAR_SIZE = 9;
+    private static final double COBWEB_MULTIPLIER = 0.25;
+    private static final double COBWEB_SPEED_ALLOWANCE = 3.0;
+    private static final double COBWEB_JUMP_ALLOWANCE = 0.2;
+    private static final int COBWEB_TICKS = 2;
+    private static final double FLUID_TOLERANCE = 8.0;
+    private static final int SPRINT_MINIMUM_FOOD = 6;
+    private static final int SPRINT_TICKS = 4;
+    private static final int ELYTRA_START_TICKS = 2;
+    private static final double GLIDE_TOLERANCE = 8.0;
+    private static final long LEVITATION_GRACE_MILLIS = 3000;
+    private static final int GLIDE_TAIL_TICKS = 20;
+    private static final Set<String> THROWN_FROM_HOTBAR = Set.of(ItemID.POTION,
+            ItemID.SPLASH_POTION, ItemID.LINGERING_POTION, ItemID.ENDER_PEARL);
+    private static final double MAX_SIMULATED_MOVEMENT_SPEED = 0.5;
     private static final double TIMER_KICK_VIOLATIONS = 15.0;
     private static final int TIMER_WINDOW_TICKS = 60;
     private static final double TIMER_MAXIMUM_RATIO = 1.7;
@@ -164,10 +178,7 @@ public final class PacketListener implements Listener {
         }
     }
 
-    /**
-     * A client running its own simulation faster than the server sends more frames than ticks elapsed.
-     * The budget already counts the excess; this is what reads it.
-     */
+    /** Compares client frames received against server ticks elapsed. */
     private void inspectTimer(Player player, PlayerData data) {
         data.network.drainOverBudgetInputs();
         data.timerInputs += data.network.drainInputCount();
@@ -292,9 +303,6 @@ public final class PacketListener implements Listener {
             synchronizeCorrection(data, Vector3f.from(to.x, to.y + event.getPlayer().getBaseOffset(), to.z));
             return;
         }
-        // Someone else moved the player. The simulation is still standing where they were, and the
-        // packets already in flight still report the old position, so it has to be rebuilt at the
-        // destination instead of measuring the distance between the two.
         data.safeLocation = event.getTo();
         data.lastPosition = null;
         data.grantGrace(TELEPORT_GRACE_MILLIS);
@@ -356,6 +364,7 @@ public final class PacketListener implements Listener {
         } else if (event.getPacket() instanceof ItemStackRequestPacket packet) {
             inventoryMoveCheck.handleRequest(playerData, packet, System.nanoTime());
         } else if (event.getPacket() instanceof InventoryTransactionPacket packet) {
+            inspectBadSlot(event, player, playerData, packet);
             inspectPlaceReach(event, player, playerData, packet);
             trackItemUseState(event, player, playerData, packet);
             trackGlideBoost(player, playerData, packet);
@@ -666,8 +675,6 @@ public final class PacketListener implements Listener {
                         (float) velocity.y(), (float) velocity.z()));
                 if (data.meleeKnockbackPending) {
                     data.meleeKnockbackPending = false;
-                    // a hit that carries no impulse has nothing to measure, and arming it would burn
-                    // the window the next real one needs
                     if (velocity.x() == 0.0 && velocity.z() == 0.0) {
                         return;
                     }
@@ -738,7 +745,12 @@ public final class PacketListener implements Listener {
         if (data == null || !data.joined || event.getMotion() == null) return;
         var motion = event.getMotion();
         if (!Double.isFinite(motion.x) || !Double.isFinite(motion.y) || !Double.isFinite(motion.z)) return;
-        data.addServerMotionCandidate(new Vec3(motion.x, motion.y, motion.z));
+        Vec3 candidate = new Vec3(motion.x, motion.y, motion.z);
+        Vec3 lunge = data.spearLungeCandidate();
+        if (lunge != null && lunge.distance(candidate) <= 1.0E-6) {
+            return;
+        }
+        data.addServerMotionCandidate(candidate);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -862,10 +874,18 @@ public final class PacketListener implements Listener {
                         || data.motion.collideZ();
                 data.penetratedLastFrame = data.motion.penetratedLastFrame();
                 data.stuckInCollider = data.motion.stuckInCollider();
+                if (data.motion.wearingElytra() && !result.onGround()) {
+                    data.lastGlideTick = data.lastTick;
+                }
                 inspectGroundSpoof(event, player, data, clientPosition);
+                inspectCobweb(event, player, data, clientPosition, observedMovement);
+                inspectSprint(event, player, data);
+                trackLevitation(player, data);
+                inspectElytra(event, player, data, packet);
                 measureMeleeKnockback(event, player, data, result, observedMovement);
                 accumulateSimulationOffset(event, player, data, result);
-                if (result.correctionRequired() && !data.nearServerMotionTick) {
+                if (result.correctionRequired() && !data.nearServerMotionTick
+                        && !beyondSimulatedSpeed(player) && !recentlyGliding(data)) {
                     data.simulationMismatchFrames++;
                     if (data.simulationMismatchFrames >= 2) {
                         data.simulationMismatchFrames = 0;
@@ -932,6 +952,9 @@ public final class PacketListener implements Listener {
                 ? data.clientScale : player.getScale());
         data.motion.size(width, height, scale);
         data.motion.wearingElytra(data.clientPlayer.wearingElytra());
+        Item boots = player.getInventory().getBoots();
+        data.motion.depthStrider(boots == null || boots.isNull()
+                ? 0 : boots.getEnchantmentLevel(Enchantment.ID_WATER_WALKER));
         GameType gameType = data.clientPlayer.gameType();
         data.motion.supportedGameMode(gameType == GameType.SURVIVAL
                 || gameType == GameType.ADVENTURE);
@@ -1061,7 +1084,32 @@ public final class PacketListener implements Listener {
         }
     }
 
-    /** The same distance rule as BreakReach-A, measured from the eye to the middle of the target block. */
+    private void inspectBadSlot(PacketReceiveEvent event, Player player, PlayerData data,
+                                InventoryTransactionPacket packet) {
+        if (!(packet.getTransaction() instanceof ItemUseInventoryTransaction transaction)) {
+            return;
+        }
+        int slot = transaction.getSlot();
+        if (slot >= 0 && slot < HOTBAR_SIZE) {
+            return;
+        }
+        ItemData sent = transaction.getItem();
+        if (sent == null || sent.getDefinition() == null) {
+            return;
+        }
+        String used = sent.getDefinition().getIdentifier();
+        if (!THROWN_FROM_HOTBAR.contains(used)) {
+            return;
+        }
+        Item offhand = player.getOffhandInventory().getItem(0);
+        if (offhand != null && !offhand.isNull() && used.equals(offhand.getId())) {
+            return;
+        }
+        fail(event, player, data, CheckType.BAD_SLOT_A, 1,
+                "used " + used + " from slot " + slot, true);
+    }
+
+    /** Distance from the eye to the middle of the placed block. */
     private void inspectPlaceReach(PacketReceiveEvent event, Player player, PlayerData data,
                                    InventoryTransactionPacket packet) {
         if (!(packet.getTransaction() instanceof ItemUseInventoryTransaction transaction)
@@ -1228,8 +1276,6 @@ public final class PacketListener implements Listener {
             fail(event, player, data, CheckType.BAD_PACKET_C, 2, "block-actions=" + actions.size(), true);
             return;
         }
-        // a setback moves the player without the client knowing yet, so the block it is still mining
-        // is measured from a position it never had; the distance is the plugin's doing, not a cheat
         boolean correcting = data.hasMovementCorrection() || data.hasPendingTeleport()
                 || data.setbackTeleportPending || data.inGrace();
         long now = System.nanoTime();
@@ -1283,8 +1329,6 @@ public final class PacketListener implements Listener {
                 }
                 boolean progressComplete = data.breakProgress >= 1.0;
                 if (!progressComplete && now - data.breakStartedNanos + leniency < required) {
-                    // Do not judge the first break frames before a latency probe has
-                    // completed. PNX can deliver START/PREDICT in the same tick.
                     if (data.network.stackLatencyMillis() <= 0) {
                         data.resetBreak();
                         continue;
@@ -1347,8 +1391,6 @@ public final class PacketListener implements Listener {
             data.earlyBreakAttempts = 0;
         }
         data.earlyBreakAttempts++;
-        // Bedrock can emit START and PREDICT in separate frames when the client
-        // is catching up. Require a longer repeated pattern before alerting.
         if (data.earlyBreakAttempts < 8) return false;
         data.earlyBreakAttempts = 0;
         data.earlyBreakWindowNanos = now;
@@ -1473,15 +1515,8 @@ public final class PacketListener implements Listener {
         fail(event, player, data, check, amount, detail, cancel, true);
     }
 
-    /**
-     * A wind charge and a spear lunge are both bursts the client predicts on its own, so the server
-     * never sends a motion packet the simulation could follow. Both already have their candidate
-     * impulses computed; whichever one matches what the player actually did is handed to the
-     * simulator as knockback, so the burst becomes a predicted move instead of an unexplained one.
-     */
+    /** Hands the simulator the burst impulse matching the observed movement, if any. */
     private void applyBurstCandidates(PlayerData data, Vec3 observedMovement) {
-        // a burst and a hit can land on the same tick, and the sum resembles neither on its own, so
-        // the impulse already armed for this tick is offered combined with each candidate too
         Vec3 pending = data.motion.hasKnockback()
                 ? new Vec3(data.motion.knockback().x(), data.motion.knockback().y(),
                         data.motion.knockback().z())
@@ -1523,29 +1558,117 @@ public final class PacketListener implements Listener {
         data.clearSpearLungeCandidate();
     }
 
-    /**
-     * The 0.5 block correction threshold only exists to decide when to rubber-band the player, and a
-     * cheat that stays just under it, or that only offends every other tick, never reaches it. This
-     * accumulates the offset the simulation could not explain so a small but persistent divergence —
-     * which is exactly what flight and speed look like — eventually flags on its own.
-     */
-    /**
-     * A melee knockback is a vector the server computed itself, so the share of it the client actually
-     * travelled is a ratio rather than a distance, and a ratio does not move with latency. Reducing
-     * knockback is the whole point of the cheat, so a client that keeps travelling well under its own
-     * impulse is the signal.
-     */
-    /**
-     * Claiming to stand on air is what a NoFall rewrite produces, and the same lie carries step, some
-     * flight, and walking on water. The world is asked directly rather than the simulation, so a
-     * prediction that drifted cannot make this fire.
-     */
+    /** Grants grace when levitation ends, since the client falls back under gravity on its own. */
+    private void trackLevitation(Player player, PlayerData data) {
+        boolean levitating = player.hasEffect(EffectType.LEVITATION);
+        if (data.wasLevitating && !levitating) {
+            data.grantGrace(LEVITATION_GRACE_MILLIS);
+        }
+        data.wasLevitating = levitating;
+    }
+
+    /** Validates the preconditions of a glide start. */
+    private void inspectElytra(PacketReceiveEvent event, Player player, PlayerData data,
+                               PlayerAuthInputPacket packet) {
+        var input = packet.getInputData();
+        if (!input.contains(PlayerAuthInputData.START_GLIDING)) {
+            return;
+        }
+
+        long previousStart = data.lastGlideStartTick;
+        data.lastGlideStartTick = data.lastTick;
+        if (data.inGrace() || player.isSpectator()) {
+            return;
+        }
+
+        if (player.getRiding() != null) {
+            fail(event, player, data, CheckType.ELYTRA_A, 1, "riding", false, true);
+        }
+        if (previousStart != Long.MIN_VALUE) {
+            long since = data.lastTick - previousStart;
+            if (since < ELYTRA_START_TICKS) {
+                fail(event, player, data, CheckType.ELYTRA_B, 1,
+                        "restarted after " + since + " ticks", false, true);
+            }
+        }
+    }
+
+    /** Flags a sprint state the client cannot legitimately hold. */
+    private void inspectSprint(PacketReceiveEvent event, Player player, PlayerData data) {
+        boolean sprinting = data.motion.sprinting();
+        boolean startedSprinting = sprinting && !data.wasSprinting;
+        data.wasSprinting = sprinting;
+
+        if (data.inGrace() || player.getAllowFlight() || player.isFlying() || player.isSpectator()
+                || player.getRiding() != null || !sprinting) {
+            data.sprintFoodBuffer = 0;
+            data.sprintUseBuffer = 0;
+            return;
+        }
+
+        if (!data.motion.wearingElytra()
+                && player.getFoodData().getFood() <= SPRINT_MINIMUM_FOOD) {
+            if (++data.sprintFoodBuffer >= SPRINT_TICKS) {
+                data.sprintFoodBuffer = 0;
+                fail(event, player, data, CheckType.SPRINT_A, 1,
+                        "food=" + player.getFoodData().getFood(), false, true);
+            }
+        } else {
+            data.sprintFoodBuffer = 0;
+        }
+
+        if (data.motion.consuming()) {
+            if (++data.sprintUseBuffer >= SPRINT_TICKS) {
+                data.sprintUseBuffer = 0;
+                fail(event, player, data, CheckType.SPRINT_B, 1, "using an item", false, true);
+            }
+        } else {
+            data.sprintUseBuffer = 0;
+        }
+
+        if (startedSprinting && player.hasEffect(EffectType.BLINDNESS)) {
+            fail(event, player, data, CheckType.SPRINT_C, 1, "blinded", false, true);
+        }
+    }
+
+    /** Flags movement through a cobweb beyond what its slowdown allows. */
+    private void inspectCobweb(PacketReceiveEvent event, Player player, PlayerData data,
+                               Vector3f position, Vec3 movement) {
+        if (data.inGrace() || player.getAllowFlight() || player.isFlying() || player.isSpectator()
+                || player.getRiding() != null || data.hasMovementCorrection()
+                || data.hasPendingTeleport()
+                || !MovementCheckSupport.insideCobweb(player, position)) {
+            data.cobwebBuffer = 0;
+            return;
+        }
+
+        double horizontal = Math.sqrt(movement.x() * movement.x() + movement.z() * movement.z());
+        double allowed = COBWEB_MULTIPLIER * (Math.max(DEFAULT_MOVEMENT_SPEED,
+                player.getMovementSpeed()) * COBWEB_SPEED_ALLOWANCE + COBWEB_JUMP_ALLOWANCE);
+        if (horizontal <= allowed) {
+            data.cobwebBuffer = 0;
+            return;
+        }
+
+        data.cobwebBuffer++;
+        if (data.cobwebBuffer < COBWEB_TICKS) {
+            return;
+        }
+
+        data.cobwebBuffer = 0;
+        fail(event, player, data, CheckType.COBWEB_A, 1,
+                "moved " + NetworkCheckSupport.format(horizontal) + " of "
+                        + NetworkCheckSupport.format(allowed), false, true);
+    }
+
     private void inspectGroundSpoof(PacketReceiveEvent event, Player player, PlayerData data,
                                     Vector3f position) {
         if (data.inGrace() || player.getAllowFlight() || player.isFlying()
                 || player.isSpectator() || player.getRiding() != null
                 || !data.motion.client().verticalCollision()
-                || MovementCheckSupport.serverGround(player, position)) {
+                || data.motion.wearingElytra()
+                || MovementCheckSupport.serverGround(player, position)
+                || MovementCheckSupport.nearPartialBlock(player, position)) {
             data.groundSpoofBuffer = 0;
             return;
         }
@@ -1566,9 +1689,6 @@ public final class PacketListener implements Listener {
             return;
         }
 
-        // The simulation already applies the impulse through cobwebs, walls, fluids and everything
-        // else that legitimately absorbs it, so what it predicts is the only fair thing to compare
-        // against. A tick it could not model at all says nothing either way.
         if (!result.reliable() || data.hasMovementCorrection() || data.hasPendingTeleport()) {
             data.meleeKnockbackTicks = 0;
             data.expectedMeleeKnockback = null;
@@ -1603,8 +1723,6 @@ public final class PacketListener implements Listener {
             return;
         }
 
-        // an amplified impulse carries the player further than it should, so there is nothing to give
-        // back; the position check is what pulls them in
         if (ratio < VELOCITY_MINIMUM_RATIO) {
             reapplyMissingKnockback(player, data, expected, horizontal,
                     travelled - data.meleeKnockbackObserved);
@@ -1622,11 +1740,7 @@ public final class PacketListener implements Listener {
                 false, false);
     }
 
-    /**
-     * Moves the player the distance the impulse should have carried them. Resending the motion would
-     * be refused the same way the first one was: a client that ignores knockback ignores every motion
-     * packet, while a position is the server's to decide.
-     */
+    /** Moves the player the distance the impulse should have carried them. */
     private void reapplyMissingKnockback(Player player, PlayerData data, Vec3 expected,
                                          double horizontal, double missingDistance) {
         if (horizontal < 1.0E-4 || missingDistance < VELOCITY_MINIMUM_PUSH) {
@@ -1642,10 +1756,8 @@ public final class PacketListener implements Listener {
 
     private void accumulateSimulationOffset(PacketReceiveEvent event, Player player,
                                             PlayerData data, MovementPipelineResult result) {
-        // an offset measured without re-anchoring is drift carried over from earlier ticks, and
-        // counting it feeds a loop: violation, setback, no re-anchor, same offset again
         if (!result.anchored() || data.inGrace() || data.hasMovementCorrection()
-                || data.hasPendingTeleport()) {
+                || data.hasPendingTeleport() || beyondSimulatedSpeed(player)) {
             return;
         }
         if (data.movementPacketDropped) {
@@ -1653,20 +1765,22 @@ public final class PacketListener implements Listener {
             return;
         }
 
-        // No movement covers this in one tick, so it is a desync — a teleport that never reached us,
-        // a world change, a resend. The simulation re-anchors on its own; counting it as a physics
-        // failure only reports how far apart the two were.
         if (result.offset() > DESYNC_OFFSET) {
             data.simulationOffsetBuffer = 0.0;
             return;
         }
 
         double tolerance = plugin.settings().predictionTolerance();
+        tolerance *= Math.max(1.0, player.getMovementSpeed() / DEFAULT_MOVEMENT_SPEED);
+        if (result.inFluid()) {
+            tolerance *= FLUID_TOLERANCE;
+        }
+        if (recentlyGliding(data)) {
+            tolerance *= GLIDE_TOLERANCE;
+        }
         if (data.nearServerMotionTick) {
             tolerance *= 4.0;
         }
-        // The impulse tick resynchronises the velocity, the ones after it do not, so the flight that
-        // follows a hit carries whatever the two disagreed on until the player lands.
         if (result.ticksSinceImpulse() < IMPULSE_TOLERANCE_TICKS) {
             tolerance *= 3.0;
         }
@@ -1676,8 +1790,6 @@ public final class PacketListener implements Listener {
                 - plugin.settings().predictionBufferDecay());
 
         if (data.simulationOffsetBuffer <= 0.0 && result.onGround()) {
-            // only ground counts: a spot reached in mid-air may already be part of the flight being
-            // checked, and sending the player back to it would confirm the cheat instead of undoing it
             data.lastVerifiedPosition = new Vec3(result.clientPosition().x(),
                     result.clientPosition().y() + MovementConstants.CORRECTION_HEIGHT_OFFSET,
                     result.clientPosition().z());
@@ -1704,7 +1816,6 @@ public final class PacketListener implements Listener {
                         + (data.nearServerMotionTick ? " impulse" : "")
                         + " tick=" + result.tick(), false, false);
 
-        // the buffer is the signal that survives a cheat pacing itself, so it decides the setback too
         double violations = data.violations.getOrDefault(CheckType.SIMULATION.id(), 0.0);
         if (violations >= Math.max(1.0, plugin.settings().setbackViolations())) {
             scheduleMovementCorrection(player, data);
@@ -1744,11 +1855,21 @@ public final class PacketListener implements Listener {
         }
     }
 
+    /** Whether the player is gliding or landed from a glide within the last second. */
+    private static boolean recentlyGliding(PlayerData data) {
+        return data.lastGlideTick != Long.MIN_VALUE
+                && data.lastTick - data.lastGlideTick < GLIDE_TAIL_TICKS;
+    }
+
+    private static boolean beyondSimulatedSpeed(Player player) {
+        return player.getMovementSpeed() > MAX_SIMULATED_MOVEMENT_SPEED;
+    }
+
     private void scheduleMovementCorrection(Player player, PlayerData data) {
         scheduleMovementCorrection(player, data, true);
     }
 
-    /** {@code alert} is false when the check that asked for the correction already reported itself. */
+    /** @param alert false when the calling check already reported itself. */
     private void scheduleMovementCorrection(Player player, PlayerData data, boolean alert) {
         Vec3 position = data.lastVerifiedPosition;
         if (position == null) return;
@@ -1759,10 +1880,7 @@ public final class PacketListener implements Listener {
                 "position=" + position + " tick=" + Math.max(0, data.lastTick), alert);
     }
 
-    /**
-     * Sends the vehicle back rather than the rider. Correcting the player alone would pull them out of
-     * a boat that stays wherever the cheat left it, and the next tick puts them straight back in it.
-     */
+    /** Sends the vehicle back rather than the rider. */
     private void scheduleVehicleCorrection(Player player, PlayerData data, Entity vehicle) {
         Vec3 target = data.lastVerifiedVehiclePosition;
         if (target == null || !data.beginMovementCorrection()) {
@@ -1788,7 +1906,7 @@ public final class PacketListener implements Listener {
         directTeleportSetback(player, data, x, y, z, onGround, detail, true);
     }
 
-    /** {@code alert} is false for a correction that is not itself a detection. */
+    /** @param alert false for a correction that is not itself a detection. */
     private void directTeleportSetback(Player player, PlayerData data,
                                        double x, double y, double z, boolean onGround,
                                        String detail, boolean alert) {
@@ -1816,8 +1934,6 @@ public final class PacketListener implements Listener {
             data.stageDirectSetback(Vector3f.from(x,
                     y + MovementConstants.CORRECTION_HEIGHT_OFFSET, z), onGround);
 
-            // The MovePlayerPacket produced by Player#teleport must use the normal
-            // teleport ACK path instead of the old prediction-correction path.
             data.finishMovementCorrection();
             if (!player.teleport(target, PlayerTeleportEvent.TeleportCause.PLUGIN)) {
                 data.setbackTeleportPending = false;

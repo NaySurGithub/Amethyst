@@ -36,8 +36,6 @@ public final class CombatPredictor {
             if (client != null && client.valid) return client.result();
         }
 
-        // Combat happens between movement ticks, so both the attacker and target are sampled
-        // across the whole partial-tick interval instead of selecting one favourable endpoint.
         for (int index = 0; index + 1 < frames.size(); index++) {
             WorldFrame end = frames.get(index);
             WorldFrame start = frames.get(index + 1);

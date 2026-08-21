@@ -12,13 +12,11 @@ import java.util.Map;
 
 public final class FrameWorldView implements MovementWorldView {
     private static final float SOLID_ENTITY_RANGE = 1.5f;
+    private static final float FLUID_TEST_INSET = 0.4f;
 
     private final WorldFrame frame;
-    /** One view per block frame: a single simulated tick asks for the same cells over and over. */
     private final Map<BlockFrame, MovementBlockView> views = new IdentityHashMap<>();
 
-    // reliable() and the simulation ask the same questions about the same box within a tick, and a
-    // branch that is tried and rolled back asks them again with the box it started from
     private FloatBox fluidBox;
     private FluidState fluidResult;
 
@@ -46,7 +44,6 @@ public final class FrameWorldView implements MovementWorldView {
             converted.add(toFloatBox(box));
         }
 
-        // a boat or a minecart is walked on like a block, and nothing else about it is captured
         for (Aabb box : frame.solidEntityBoxes()) {
             if (box.intersects(query)) {
                 converted.add(toFloatBox(box));
@@ -98,16 +95,19 @@ public final class FrameWorldView implements MovementWorldView {
         int bubbleDirection = 0;
         boolean bubbleSurface = false;
 
+        float inset = Math.max(0.0f, Math.min(FLUID_TEST_INSET,
+                (area.maxY() - area.minY() - 0.02f) * 0.5f));
+        float testMinY = area.minY() + inset;
+        float testMaxY = area.maxY() - inset;
+
         for (BlockPos position : frame.index().fluids()) {
             BlockFrame block = frame.blocks().get(position);
             if (block == null) {
                 continue;
             }
 
-            // a fluid block only counts up to its own surface, so a shallow stream is not treated
-            // as a full block of water
             float top = position.y() + (float) block.fluidHeight();
-            if (top <= area.minY() || position.y() >= area.maxY()
+            if (top <= testMinY || position.y() >= testMaxY
                     || position.x() + 1 <= area.minX() || position.x() >= area.maxX()
                     || position.z() + 1 <= area.minZ() || position.z() >= area.maxZ()) {
                 continue;
@@ -122,7 +122,6 @@ public final class FrameWorldView implements MovementWorldView {
 
             if (block.bubbleDirection() != 0 && bubbleDirection == 0) {
                 bubbleDirection = block.bubbleDirection();
-                // the column throws harder on its last block, where it breaks the surface
                 bubbleSurface = frame.blockAt(position.x(), position.y() + 1, position.z()) == null;
             }
         }

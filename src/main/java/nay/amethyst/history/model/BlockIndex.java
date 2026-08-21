@@ -4,11 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-/**
- * The positions the movement checks ask about by category. Answering those questions by walking the
- * whole block map costs a full scan several times per tick, while the categories are nearly always
- * empty, so they are collected once when the frame is captured.
- */
+/** Captured block positions grouped by the categories the movement checks query. */
 public record BlockIndex(
         List<BlockPos> fluids,
         List<BlockPos> bamboo,

@@ -39,11 +39,14 @@ Nécessite PowerNukkitX et Java 21.
 
 ### La simulation
 
-`MovementSimulator` fait avancer un état de mouvement appartenant au serveur dans le vrai ordre de tick de
-Bedrock : friction du bloc sous les pieds, accélération d'entrée, saut, blocs escaladables, toiles, collision,
-puis gravité. Les constantes sont celles du jeu - friction de l'air `0.91`, multiplicateur de gravité `0.98`,
-hauteur de pas `0.5625` - et la trigonométrie passe par une réimplémentation de la table de sinus à 65536
-entrées de Mojang, pour que l'erreur flottante colle au client au lieu de simplement s'en approcher.
+`MovementSimulator` choisit le moteur correspondant au milieu où se trouve le joueur - sol et air, eau, lave,
+vol plané - et lui confie le tick entier. Chaque moteur fait avancer un état de mouvement appartenant au
+serveur dans le vrai ordre de tick de Bedrock pour ce milieu : au sol, friction du bloc sous les pieds,
+accélération d'entrée, saut, blocs escaladables, toiles, collision, puis gravité ; dans l'eau, traînée du
+fluide, Pas de l'abysse et une gravité au seizième de sa valeur. Les constantes sont celles du jeu - friction
+de l'air `0.91`, multiplicateur de gravité `0.98`, hauteur de pas `0.5625` - et la trigonométrie passe par une
+réimplémentation de la table de sinus à 65536 entrées de Mojang, pour que l'erreur flottante colle au client
+au lieu de simplement s'en approcher.
 
 Elle est autoritative, pas contemplative : le paquet entrant est réécrit avec la position simulée avant que le
 serveur ne le voie.
@@ -101,7 +104,9 @@ changement qu'une fois que le client l'a réellement vu.
 | `Timer` | Plus de frames client que de ticks écoulés, signature d'un client qui accélère sa propre simulation. |
 | `Vehicle-A` | Un bateau, un wagonnet ou une monture qui ne correspond pas à sa prédiction. C'est le véhicule qui est renvoyé, pas son passager. |
 | `NoFall-A` | Des dégâts de chute qui ne correspondent pas à la chute simulée. |
-| `GroundSpoof-A` | Le client annonce une collision verticale avec rien sous lui. |
+| `GroundSpoof-A` | Le client annonce une collision verticale avec rien sous lui. Ignoré sur les blocs partiels et sous élytre. |
+| `Sprint-A…C` | Un sprint que le client ne peut pas légitimement tenir : trop peu de nourriture, un objet en cours d'usage, ou démarré sous Cécité. |
+| `Elytra-A…B` | Un vol plané démarré en véhicule, ou relancé moins de deux ticks après le précédent. |
 | `KillAura-A` | Cible ou séquence d'attaque invalide. |
 | `Reach-A` | Cible frappée au-delà de la portée, mesurée contre sa boîte rembobinée. |
 | `Hitbox-A` | Le rayon de visée n'a jamais croisé la cible. Joueurs uniquement : la boîte rembobinée d'un mob est trop lissée pour un rayon. |
@@ -110,13 +115,16 @@ changement qu'une fois que le client l'a réellement vu.
 | `FastBreak-A` | Bloc détruit avant le temps de minage calculé par le serveur. |
 | `WeirdPlace-A` | Bloc posé contre quelque chose que le joueur ne regardait pas, ou sans le tenir. La pose est refusée. |
 | `Scaffold-A` | Vecteur de clic nul sur une pose initiale déclenchée par l'entrée joueur. |
+| `Cobweb-A` | Déplacement dans une toile plus rapide que son propre ralentissement ne l'autorise. |
+| `BadSlot-A` | Potion ou perle de l'Ender utilisée depuis un emplacement hors de la barre d'action. La transaction est refusée. |
 | `FastUse-A` | Un consommable terminé en moins de ticks qu'aucun aliment ou potion n'en demande. |
 | `InvMove-A` | Déplacement dirigé pendant une interaction d'inventaire. |
 | `BedrockTool-A` | L'identité du client correspond à un outil connu : modèle figé, version de géométrie vide et skin uniforme. |
 | `BadPacket-A…J` | Champs de paquet malformés ou impossibles : valeurs non finies, ticks périmés, slots, faces, canaux et énumérations invalides. |
 
 Les paquets invalides sont annulés. Des violations de mouvement répétées provoquent un setback vers la dernière
-position vérifiée **au sol** ; un joueur qui n'en a pas encore atteint une reçoit seulement des alertes.
+position vérifiée **au sol** - jamais dans un fluide ; un joueur qui n'en a pas encore atteint une reçoit
+seulement des alertes.
 `Timer` au-delà de quinze violations, `BedrockTool-A` dès la détection, ainsi que `BadPacket-D` et
 `BadPacket-E`, expulsent ; rien d'autre ne le fait, et Amethyst ne bannit jamais.
 
@@ -131,6 +139,7 @@ autre plugin peut exempter un cas qu'Amethyst ne peut pas connaître.
 | Réglage | Rôle |
 | --- | --- |
 | `alerts` | Active les alertes de violation. |
+| `dev-logs` | Ajoute l'écart, les deux positions et l'état de la simulation à chaque alerte. Désactivé par défaut ; nécessaire pour signaler un faux positif. |
 | `updates.check` | Vérifie au démarrage s'il existe une version plus récente. |
 | `setback-violations` | Violations nécessaires avant un setback de mouvement. |
 | `max-packet-actions` | Nombre maximum d'actions de bloc acceptées dans un paquet d'entrée. |
@@ -172,29 +181,42 @@ vrais trous, et ils sont listés parce qu'un tricheur qui les connaît peut s'en
 
 | Situation | Pourquoi |
 | --- | --- |
-| Eau | Le modèle de nage est écrit mais non validé, et désactivé derrière `MovementOptions.simulateWater`. |
-| Lave | Non modélisée. |
+| Nage | C'est là que le modèle de fluide dérive le plus, donc elle est ignorée - mais seulement si de l'eau est réellement présente, si bien que prétendre nager en plein ciel ne rapporte rien. |
+| La seconde qui suit la fin de la Lévitation | Le client reprend sa chute seul pendant que le serveur porte encore la vitesse verticale de l'effet. |
 | Bambou, scaffolding | Comportements côté client que la simulation ne reproduit pas. |
 | Pistons | Un joueur poussé est déplacé par le serveur, pas par son entrée. |
 | Riptide | Une poussée d'environ 3 blocs par tick que la simulation ne peut pas produire. |
 | Encastré dans un bloc | La façon dont le client s'extrait d'un bloc posé sur lui n'appartient qu'à lui. |
 | À moins de 1,5 bloc d'un bateau ou d'un wagonnet | Il flotte et bouge seul, et sa position suivie a un tick de retard. |
 | Téléports, respawns, connexions | L'état est reconstruit à destination, avec deux à trois secondes de grâce. |
+| Une vitesse de déplacement au-dessus de 0,5 | Le joueur parcourt en un tick plus de terrain que n'en contient l'instantané capturé, donc la simulation marcherait dans des blocs qu'elle n'a jamais vus. |
+
+L'eau, la lave et le vol en élytres sont simulés et non ignorés, chacun par son propre moteur, mais aucun ne
+déclenche de setback et leur tolérance vaut huit fois la normale. Le vol plané conserve ce traitement une
+seconde après sa fin, l'atterrissage emportant la vitesse du vol dans les premiers ticks au sol. Sous ce plafond de vitesse, la tolérance suit aussi la
+vitesse accordée par le serveur : une potion de Célérité élargit la marge d'exactement ce dont elle élargit le
+pas.
 
 Les bateaux, wagonnets et shulkers sont de **vraies collisions** et non des trous : leur type est porté jusqu'au
 suivi d'entités, donc un joueur se tient dessus comme le fait son client.
 
-Le waterwalk reste détecté malgré l'exemption de l'eau, parce que le cheat maintient le joueur *au-dessus* de
-la surface, là où aucun fluide ne croise sa boîte.
+Le waterwalk reste détecté malgré l'exemption de la nage, parce que le cheat maintient le joueur *au-dessus* de
+la surface, là où aucun fluide ne croise sa boîte et où le moteur terrestre tourne normalement.
 
 ## 🚧 Ce qui n'est pas fini
 
-- **Escaliers et dalles.** La simulation traverse la demi-marche supérieure : elle s'arrête à 5,5 sur un bloc
-  dont la marche monte à 6,0, donc un joueur posé dessus est corrigé indéfiniment. `BlockStairs` renvoie deux
-  boîtes de collision et une seule survit ; reste à savoir si la perte a lieu à la capture ou dans le moteur.
-- **`GroundSpoof-A`, `FastUse-A`, `WeirdPlace-A`, `PlaceReach-A` et `BedrockTool-A` sont neufs** et n'ont pas
-  subi de passe de faux positifs. Le plus susceptible de faire du bruit est la comparaison de l'objet tenu dans
-  `WeirdPlace-A` : un changement de barre peut tomber au milieu d'une transaction.
+- **Le modèle d'eau est jeune.** Il a été écrit face à une implémentation qui fonctionne et ses constantes sont
+  celles du jeu, mais il est né en une seule séance. C'est pour cette raison que la nage est ignorée ; patauger
+  ne l'est pas.
+- **Les coins d'escalier sont déduits, pas lus.** Le serveur modélise tout escalier comme droit, donc la forme
+  est recalculée depuis les voisins comme le fait le jeu. Ce code n'a pas encore rencontré un vrai escalier.
+- **Le vol en élytres est la partie la moins stable du modèle.** La formule correspond terme pour terme à une
+  implémentation qui fonctionne, et pourtant elle dérive d'environ un bloc par tick — d'où l'absence de
+  setback et la tolérance élargie. La cause est en amont de la formule et n'est pas encore trouvée.
+- **`Cobweb-A`, `BadSlot-A`, `Sprint-A…C`, `Elytra-A…B`, `GroundSpoof-A`, `FastUse-A`, `WeirdPlace-A`,
+  `PlaceReach-A` et `BedrockTool-A` sont neufs** et n'ont pas subi de passe de faux positifs. Les familles
+  `Sprint` et `Elytra` viennent d'un anticheat Java Edition et seul `Sprint-A` est vérifié dans le source du
+  serveur ; les autres ne décrivent peut-être pas Bedrock.
 - **Aucun test.** La physique est exactement le genre de code qu'une suite de tests figerait, et il n'y en a
   aucune.
 - **Aucun banc de rejeu.** Chaque diagnostic demande aujourd'hui un redémarrage de serveur et un humain qui
@@ -206,7 +228,8 @@ la surface, là où aucun fluide ne croise sa boîte.
 
 ## 🐛 Signaler un faux positif
 
-La ligne d'alerte est l'essentiel. Elle porte l'écart, les deux positions, le drapeau de sol, ce que la
+Passe d'abord `dev-logs` à `true` : sans lui une alerte ne donne que le nom du check, ce qui est
+insignalable. La ligne détaillée porte l'écart, les deux positions, le drapeau de sol, ce que la
 simulation croyait avoir sous les pieds du joueur, sa vitesse verticale et le tick :
 
 ```
@@ -216,7 +239,8 @@ failed Simulation (VL 1.0) offset=0.420 client=[…] predicted=[…] ground=true
 
 `support` est ce que la simulation croyait avoir sous les pieds du joueur, `below` ce que le frame capturé
 contient réellement sous lui et combien de boîtes de collision il en a gardées, et `kb-age` l'ancienneté de la
-dernière impulsion parvenue à la simulation.
+dernière impulsion parvenue à la simulation. Dans un fluide, la ligne porte en plus `sub`, de combien la
+surface dépasse les pieds du joueur, et le mot `fluid` quand le tick est passé par un moteur de fluide.
 
 Lis-la avant de la signaler - la forme des nombres nomme souvent le bug :
 

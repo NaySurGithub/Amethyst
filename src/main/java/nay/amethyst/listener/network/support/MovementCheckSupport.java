@@ -7,6 +7,7 @@ import org.cloudburstmc.math.vector.Vector3f;
 import org.powernukkitx.Player;
 import org.powernukkitx.block.BlockFenceGate;
 import org.powernukkitx.block.Block;
+import org.powernukkitx.block.BlockID;
 import org.powernukkitx.math.AxisAlignedBB;
 import org.powernukkitx.math.SimpleAxisAlignedBB;
 import org.powernukkitx.level.Location;
@@ -36,8 +37,57 @@ public final class MovementCheckSupport {
         return false;
     }
 
+    /** Whether anything under the player has a collision box smaller than a full cube. */
+    public static boolean nearPartialBlock(Player player, Vector3f position) {
+        double half = player.getWidth() / 2.0;
+        double feet = position.getY() - player.getBaseOffset();
+        int minimumX = floor((float) (position.getX() - half));
+        int maximumX = floor((float) (position.getX() + half));
+        int minimumY = floor((float) (feet - 0.35));
+        int maximumY = floor((float) (feet + 0.02));
+        int minimumZ = floor((float) (position.getZ() - half));
+        int maximumZ = floor((float) (position.getZ() + half));
+        for (int x = minimumX; x <= maximumX; x++) {
+            for (int y = minimumY; y <= maximumY; y++) {
+                for (int z = minimumZ; z <= maximumZ; z++) {
+                    Block block = player.getLevel().getBlock(x, y, z, 0);
+                    if (block == null || block.isAir()) continue;
+                    AxisAlignedBB box = block.getBoundingBox();
+                    if (box == null) continue;
+                    if (box.getMaxY() - box.getMinY() < 1.0 - 1.0E-6
+                            || box.getMaxX() - box.getMinX() < 1.0 - 1.0E-6
+                            || box.getMaxZ() - box.getMinZ() < 1.0 - 1.0E-6) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    public static boolean insideCobweb(Player player, Vector3f position) {
+        double half = player.getWidth() / 2.0;
+        double feet = position.getY() - player.getBaseOffset();
+        int minimumX = floor((float) (position.getX() - half));
+        int maximumX = floor((float) (position.getX() + half));
+        int minimumY = floor((float) feet);
+        int maximumY = floor((float) (feet + player.getHeight()));
+        int minimumZ = floor((float) (position.getZ() - half));
+        int maximumZ = floor((float) (position.getZ() + half));
+        for (int x = minimumX; x <= maximumX; x++) {
+            for (int y = minimumY; y <= maximumY; y++) {
+                for (int z = minimumZ; z <= maximumZ; z++) {
+                    if (BlockID.WEB.equals(player.getLevel().getBlock(x, y, z, 0).getId())) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     public static boolean serverGround(Player player, Vector3f position) {
-        double half = player.getWidth() / 2.0 - 0.04;
+        double half = player.getWidth() / 2.0 - (player.isSneaking() ? 0.005 : 0.04);
         double feet = position.getY() - player.getBaseOffset();
         AxisAlignedBB box = new SimpleAxisAlignedBB(position.getX() - half, feet - 0.35, position.getZ() - half,
                 position.getX() + half, feet + 0.02, position.getZ() + half);
