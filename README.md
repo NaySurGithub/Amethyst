@@ -207,10 +207,6 @@ surface, where no fluid intersects their box and the ground engine runs as usual
   game's own, but it went live in a single sitting. Swimming is skipped for that reason; wading is not.
 - **Stair corners are derived, not read.** The server models every stair as straight, so the shape is
   recomputed from the neighbours the way the game does it. That code has not met a real staircase yet.
-- **Elytra flight is the least settled part of the model.** The formula matches a working
-  implementation term for term, yet it drifts about a block a tick, which is why gliding neither
-  triggers a setback nor uses the normal tolerance. The cause is upstream of the formula and is not
-  found yet.
 - **`Cobweb-A`, `BadSlot-A`, `Sprint-A…C`, `Elytra-A…B`, `GroundSpoof-A`, `FastUse-A`,
   `WeirdPlace-A`, `PlaceReach-A` and `BedrockTool-A` are new** and have not been through a
   false-positive pass. The `Sprint` and `Elytra` families were derived from a Java-edition anti-cheat

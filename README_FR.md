@@ -210,9 +210,6 @@ la surface, là où aucun fluide ne croise sa boîte et où le moteur terrestre 
   ne l'est pas.
 - **Les coins d'escalier sont déduits, pas lus.** Le serveur modélise tout escalier comme droit, donc la forme
   est recalculée depuis les voisins comme le fait le jeu. Ce code n'a pas encore rencontré un vrai escalier.
-- **Le vol en élytres est la partie la moins stable du modèle.** La formule correspond terme pour terme à une
-  implémentation qui fonctionne, et pourtant elle dérive d'environ un bloc par tick — d'où l'absence de
-  setback et la tolérance élargie. La cause est en amont de la formule et n'est pas encore trouvée.
 - **`Cobweb-A`, `BadSlot-A`, `Sprint-A…C`, `Elytra-A…B`, `GroundSpoof-A`, `FastUse-A`, `WeirdPlace-A`,
   `PlaceReach-A` et `BedrockTool-A` sont neufs** et n'ont pas subi de passe de faux positifs. Les familles
   `Sprint` et `Elytra` viennent d'un anticheat Java Edition et seul `Sprint-A` est vérifié dans le source du
