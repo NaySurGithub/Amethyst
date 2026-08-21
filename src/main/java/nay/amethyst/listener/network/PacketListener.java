@@ -1954,7 +1954,9 @@ public final class PacketListener implements Listener {
         }
         double vl = data.violations.merge(check.id(), amount, Double::sum);
         long now = System.nanoTime();
-        if (now - data.lastAlertNanos > 300_000_000L) {
+        if (check == CheckType.AUTOCLICKER_A) {
+            plugin.alert(player, check, vl, detail);
+        } else if (now - data.lastAlertNanos > 300_000_000L) {
             plugin.alert(player, check, vl, detail);
             data.lastAlertNanos = now;
         }
