@@ -1,5 +1,6 @@
 package nay.amethyst;
 
+import nay.amethyst.api.PlayerViolationEvent;
 import nay.amethyst.data.player.PlayerData;
 import nay.amethyst.check.type.CheckType;
 import nay.amethyst.config.AmethystSettings;
@@ -71,6 +72,9 @@ public final class AmethystPlugin extends PluginBase {
     }
 
     public void alert(Player suspect, CheckType check, double vl, String detail) {
+        PlayerViolationEvent event = new PlayerViolationEvent(suspect, check, vl, detail);
+        getServer().getPluginManager().callEvent(event);
+        if (event.isCancelled()) return;
         if (!alertsEnabled) return;
         String message = alertFormatter.format(suspect, check, vl, detail);
         getLogger().warning("[Amethyst] " + suspect.getName() + " failed " + check.id()

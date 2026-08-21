@@ -93,8 +93,9 @@ public final class AuthoritativeMovementPipeline {
         return new MovementPipelineResult(state.client().position(), predictedPosition,
                 state.velocity(), forwarded, positionDifference, velocityDifference,
                 correctionRequired, simulation.reliable(), simulation.inFluid(),
-                hadKnockback && !impulseDeferred, impulseDeferred, anchored,
-                describeSupport(world), state.supportingBlockY(), state.onGround(), input.tick());
+                hadKnockback && !impulseDeferred, impulseDeferred, state.ticksSinceKnockback(), anchored,
+                describeSupport(world), state.supportingBlockY(), describeBelow(world),
+                state.onGround(), input.tick());
     }
 
     /**
@@ -125,7 +126,10 @@ public final class AuthoritativeMovementPipeline {
         // ahead, so the tick is also tried without it and the impulse stays armed if that fits better
         if (hadKnockback) {
             state.restore(start);
-            state.deferKnockback();
+            if (!state.deferKnockback()) {
+                state.restore(best);
+                return result;
+            }
             MovementSimulator.SimulationResult deferred = simulator.simulate(state, world,
                     options.correctionThreshold());
             float deferredOffset = offsetFromClient();
@@ -146,8 +150,8 @@ public final class AuthoritativeMovementPipeline {
 
         boolean jumpAmbiguous = couldJump
                 && state.jumping() != (state.pressingJump() && start.onGround());
-        boolean sprintAmbiguous = (hasMovementInput || couldJump && state.jumping())
-                && state.sprinting() != state.pressingSprint();
+        boolean sprintAmbiguous = couldJump && state.jumping()
+                || hasMovementInput && state.sprinting() != state.pressingSprint();
         if (!jumpAmbiguous && !sprintAmbiguous) {
             state.restore(best);
             return result;
@@ -192,6 +196,16 @@ public final class AuthoritativeMovementPipeline {
         }
         return world.block(state.supportingBlockX(), state.supportingBlockY(),
                 state.supportingBlockZ()).id();
+    }
+
+    /** Names the block under the client and how much collision the frame kept for it. */
+    private String describeBelow(MovementWorldView world) {
+        FloatVector feet = state.client().position();
+        int x = (int) Math.floor(feet.x());
+        int y = (int) Math.floor(feet.y() - 0.1f);
+        int z = (int) Math.floor(feet.z());
+        FloatBox cell = new FloatBox(x, y, z, x + 1.0f, y + 1.0f, z + 1.0f);
+        return world.block(x, y, z).id() + "@" + y + "/" + world.collisionBoxes(cell).size();
     }
 
     private float offsetFromClient() {

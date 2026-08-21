@@ -20,9 +20,14 @@ public enum CheckType {
     KILL_AURA_A("KillAura-A", "Invalid attack target or attack sequence.", true),
     REACH_A("Reach-A", "The target was attacked beyond the allowed reach.", true),
     HITBOX_A("Hitbox-A", "The sight ray did not intersect the target hitbox.", true),
-    BREAK_REACH("Break-Reach", "A block was broken beyond the allowed reach."),
+    BREAK_REACH("BreakReach-A", "A block was broken beyond the allowed reach."),
+    PLACE_REACH_A("PlaceReach-A", "A block was placed beyond the allowed reach."),
     FAST_BREAK_A("FastBreak-A", "A block was destroyed before its calculated break time."),
-    SCAFFOLD_A("Scaffold-A", "The click vector was zero during an initial player-input placement.");
+    SCAFFOLD_A("Scaffold-A", "The click vector was zero during an initial player-input placement."),
+    GROUND_SPOOF_A("GroundSpoof-A", "The client reported standing on nothing.", true),
+    FAST_USE_A("FastUse-A", "An item was consumed faster than it can be used."),
+    WEIRD_PLACE_A("WeirdPlace-A", "A block was placed against something the player was not looking at."),
+    BEDROCK_TOOL_A("BedrockTool-A", "The client identity matches a known tool.", true);
 
     private final String id;
     private final String description;

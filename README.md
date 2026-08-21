@@ -96,19 +96,33 @@ client has actually seen it.
 | Check | What it means |
 | --- | --- |
 | `Simulation` | Movement the physics simulation could not explain. Feeds the buffer; drives setbacks. |
-| `Vehicle-A` | Boat, minecart or mount movement that did not match its own prediction. |
+| `Velocity-A` | A melee knockback the player did not travel, or travelled far beyond. The missing part is given back by moving them. |
+| `Timer` | More client frames than ticks elapsed, which is a client running its own simulation fast. |
+| `Vehicle-A` | Boat, minecart or mount movement that did not match its own prediction. The vehicle is sent back, not its rider. |
 | `NoFall-A` | Fall damage that did not match the simulated fall. |
+| `GroundSpoof-A` | The client claimed a vertical collision with nothing under it. |
 | `KillAura-A` | Invalid attack target or attack sequence. |
 | `Reach-A` | Target attacked beyond the allowed reach, measured against its rewound hitbox. |
-| `Hitbox-A` | The sight ray never intersected the target. |
-| `Break-Reach` | Block broken beyond the allowed distance. |
+| `Hitbox-A` | The sight ray never intersected the target. Players only, since a mob's rewound box is smoothed too far to raycast against. |
+| `BreakReach-A` | Block broken beyond the allowed distance. |
+| `PlaceReach-A` | Block placed beyond that same distance. |
 | `FastBreak-A` | Block destroyed before its server-calculated break time. |
+| `WeirdPlace-A` | A block placed against something the player was not looking at, or while not holding it. The placement is refused. |
 | `Scaffold-A` | Zero click vector on an initial player-input placement. |
+| `FastUse-A` | A consumable finished in fewer ticks than any food or potion takes. |
 | `InvMove-A` | Directed movement during an inventory interaction. |
+| `BedrockTool-A` | The client identity matches a known tool: fixed device model, empty geometry version and a blank skin. |
 | `BadPacket-A…J` | Malformed or impossible packet fields: non-finite values, stale ticks, invalid slots, faces, channels and enums. |
 
-Invalid packets are cancelled. Repeated movement violations cause a setback to the last verified position.
-`BadPacket-D` and `BadPacket-E` kick; nothing else does, and Amethyst never bans.
+Invalid packets are cancelled. Repeated movement violations cause a setback to the last verified ground
+position, and a player who has not reached one yet is only alerted on. `Timer` past fifteen violations,
+`BedrockTool-A` on sight, and `BadPacket-D` and `BadPacket-E` kick; nothing else does, and Amethyst never bans.
+
+## 🔌 For developers
+
+`PlayerViolationEvent` fires on every flag, before the alert is sent. It carries the player, the check, the
+violation level and the same detail string the alert shows. Cancelling it suppresses the alert, which is how
+another plugin exempts a case Amethyst cannot know about.
 
 ## ⚙️ Configuration
 
@@ -162,15 +176,23 @@ and they are listed because a cheat that knows about them can use them:
 | Pistons | A player being pushed is displaced by the server, not by their input. |
 | Riptide | A ~3 block/tick burst the simulation cannot produce. |
 | Inside a solid block | How the client pushes out of a block placed on it is its own affair. |
-| Teleports, respawns, joins | The state is rebuilt at the destination, with two seconds of grace. |
+| Within 1.5 blocks of a boat or minecart | It floats and moves on its own, and its tracked position is a tick behind. |
+| Teleports, respawns, joins | The state is rebuilt at the destination, with two to three seconds of grace. |
+
+Boats, minecarts and shulkers are real collisions rather than holes: their type is carried through the entity
+tracker so a player stands on them the way the client does.
 
 Waterwalk is still caught despite the water exemption, because the cheat keeps the player *above* the surface,
 where no fluid intersects their box.
 
 ## 🚧 Not finished
 
-- **`Timer` and `Velocity-A`** are listed as checks and cannot currently fire. The tick-budget counter they
-  need exists; nothing consumes it yet.
+- **Stairs and slabs.** The simulation falls through the upper half of a stair block: it stops at 5.5 on a
+  block whose step reaches 6.0, so a player standing there is corrected forever. `BlockStairs` returns two
+  collision boxes and only one survives; which of the capture or the collision engine loses it is still open.
+- **`GroundSpoof-A`, `FastUse-A`, `WeirdPlace-A`, `PlaceReach-A` and `BedrockTool-A` are new** and have not
+  been through a false-positive pass. `WeirdPlace-A` comparing the held item against the one the placement
+  claims is the most likely to be noisy, since a hotbar switch can land mid-transaction.
 - **No tests.** The physics is exactly the kind of code a test suite would pin down, and there is none.
 - **No replay harness.** Every diagnosis today needs a server restart and a human reproducing the bug. Recording
   inputs and world frames to disk, and replaying them offline, would turn a diagnosis cycle from minutes into
@@ -184,8 +206,13 @@ The alert line is the important part. It carries the offset, both positions, the
 simulation believed was supporting the player, its vertical velocity, and the tick:
 
 ```
-failed Simulation (VL 1.0) offset=0.420 client=[…] predicted=[…] ground=true support=minecraft:sand@61 vy=-0.078 tick=334
+failed Simulation (VL 1.0) offset=0.420 client=[…] predicted=[…] ground=true
+  support=minecraft:sand@61 below=minecraft:sand@60/1 vy=-0.078 kb-age=4 tick=334
 ```
+
+`support` is what the simulation believed was holding the player up, `below` is what the captured frame holds
+under them and how many collision boxes it kept for it, and `kb-age` is how long ago an impulse reached the
+simulation.
 
 Read it before reporting it - the shape of the numbers usually names the bug:
 

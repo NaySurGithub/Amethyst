@@ -19,7 +19,8 @@ public final class MovementCheckSupport {
     }
 
     public static boolean isMovementCheck(CheckType check) {
-        return check == CheckType.SIMULATION || check == CheckType.VEHICLE_A
+        return check == CheckType.SIMULATION || check == CheckType.TIMER
+                || check == CheckType.VEHICLE_A
                 || check == CheckType.NO_FALL_A || check == CheckType.VELOCITY_A;
     }
 

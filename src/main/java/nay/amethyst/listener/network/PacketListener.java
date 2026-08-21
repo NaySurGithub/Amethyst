@@ -1,6 +1,7 @@
 package nay.amethyst.listener.network;
 
 import nay.amethyst.AmethystPlugin;
+import nay.amethyst.check.client.BedrockToolDetector;
 import nay.amethyst.check.inventory.InventoryMoveCheck;
 import nay.amethyst.check.packet.BadPacketCheck;
 import nay.amethyst.check.type.CheckType;
@@ -47,6 +48,7 @@ import org.cloudburstmc.protocol.bedrock.data.payload.move.PositionMode;
 import org.cloudburstmc.protocol.bedrock.data.payload.inventory.transaction.ItemUseActionType;
 import org.cloudburstmc.protocol.bedrock.data.payload.inventory.transaction.ItemUseOnActorActionType;
 import org.cloudburstmc.protocol.bedrock.data.payload.inventory.transaction.data.ItemUseInventoryTransaction;
+import org.cloudburstmc.protocol.bedrock.data.payload.inventory.transaction.ItemReleaseActionType;
 import org.cloudburstmc.protocol.bedrock.data.payload.inventory.transaction.data.ItemReleaseInventoryTransaction;
 import org.cloudburstmc.protocol.bedrock.data.payload.inventory.transaction.data.ItemUseOnActorInventoryTransaction;
 import org.cloudburstmc.protocol.bedrock.packet.InventoryTransactionPacket;
@@ -78,6 +80,7 @@ import org.powernukkitx.block.BlockID;
 import org.powernukkitx.event.block.BlockBreakEvent;
 import org.powernukkitx.event.block.BlockPlaceEvent;
 import org.powernukkitx.entity.Entity;
+import org.powernukkitx.entity.EntityLiving;
 import org.powernukkitx.entity.projectile.EntityWindCharge;
 import org.powernukkitx.entity.effect.EffectType;
 import org.powernukkitx.event.EventHandler;
@@ -120,6 +123,19 @@ public final class PacketListener implements Listener {
     private static final long TELEPORT_GRACE_MILLIS = 3000;
     /** Beyond this, one tick of movement cannot be the explanation. */
     private static final double DESYNC_OFFSET = 8.0;
+    private static final int VELOCITY_OBSERVE_TICKS = 4;
+    private static final double VELOCITY_MINIMUM_RATIO = 0.5;
+    private static final double VELOCITY_MAXIMUM_RATIO = 1.8;
+    private static final double VELOCITY_BUFFER = 3.0;
+    private static final double VELOCITY_MINIMUM_PUSH = 0.15;
+    private static final double VELOCITY_MAXIMUM_PUSH = 1.5;
+    private static final long IMPULSE_TOLERANCE_TICKS = 30;
+    private static final double TIMER_KICK_VIOLATIONS = 15.0;
+    private static final int TIMER_WINDOW_TICKS = 60;
+    private static final double TIMER_MAXIMUM_RATIO = 1.7;
+    private static final double TIMER_PING_ALLOWANCE = 0.5;
+    private static final int GROUND_SPOOF_TICKS = 6;
+    private static final int FAST_USE_MINIMUM_TICKS = 5;
 
     private final AmethystPlugin plugin;
     private final Map<UUID, PlayerData> players;
@@ -143,7 +159,67 @@ public final class PacketListener implements Listener {
             PlayerData data = players.get(player.getUniqueId());
             if (data == null || !data.joined) continue;
             data.network.tick(now);
+            inspectTimer(player, data);
             if (data.network.shouldProbe()) sendAcknowledgment(player, data, null);
+        }
+    }
+
+    /**
+     * A client running its own simulation faster than the server sends more frames than ticks elapsed.
+     * The budget already counts the excess; this is what reads it.
+     */
+    private void inspectTimer(Player player, PlayerData data) {
+        data.network.drainOverBudgetInputs();
+        data.timerInputs += data.network.drainInputCount();
+        data.timerTicks++;
+        if (data.inGrace() || player.hasPermission("amethyst.bypass")) {
+            data.timerInputs = 0;
+            data.timerTicks = 0;
+            data.timerWarmup = 0;
+            return;
+        }
+        if (data.timerWarmup < Math.max(0, plugin.settings().timerWarmupPackets())) {
+            data.timerWarmup++;
+            data.timerInputs = 0;
+            data.timerTicks = 0;
+            return;
+        }
+        if (data.timerTicks < TIMER_WINDOW_TICKS) {
+            return;
+        }
+
+        double ratio = data.timerInputs / (double) data.timerTicks;
+        data.timerInputs = 0;
+        data.timerTicks = 0;
+
+        long ping = Math.max(0, NetworkCheckSupport.ping(player));
+        double allowed = TIMER_MAXIMUM_RATIO + Math.min(TIMER_PING_ALLOWANCE, ping / 1000.0);
+        if (ratio <= allowed) {
+            data.timerBuffer = Math.max(0.0, data.timerBuffer - 1.0);
+            return;
+        }
+
+        data.timerBuffer++;
+        double threshold = Math.max(1.0, plugin.settings().timerViolationSamples() / 8.0);
+        if (data.timerBuffer < threshold) {
+            return;
+        }
+
+        data.timerBuffer = 0.0;
+        int excess = (int) Math.round((ratio - 1.0) * 100);
+        double vl = data.violations.merge(CheckType.TIMER.id(), 1.0, Double::sum);
+        long now = System.nanoTime();
+        if (now - data.lastAlertNanos > 300_000_000L) {
+            plugin.alert(player, CheckType.TIMER, vl,
+                    "ratio=" + NetworkCheckSupport.format(ratio) + " excess=" + excess + "%");
+            data.lastAlertNanos = now;
+        }
+        if (vl >= TIMER_KICK_VIOLATIONS) {
+            kick(player, data, "Amethyst timed out.");
+            return;
+        }
+        if (vl >= Math.max(1.0, plugin.settings().setbackViolations())) {
+            scheduleMovementCorrection(player, data, false);
         }
     }
 
@@ -176,6 +252,13 @@ public final class PacketListener implements Listener {
         }
         data.grantGrace(GRACE_MILLIS);
         movementSessions.reset(player);
+
+        String tool = BedrockToolDetector.detect(player);
+        if (tool != null) {
+            double vl = data.violations.merge(CheckType.BEDROCK_TOOL_A.id(), 1.0, Double::sum);
+            plugin.alert(player, CheckType.BEDROCK_TOOL_A, vl, tool);
+            kick(player, data, "Unsupported client");
+        }
     }
 
     @EventHandler
@@ -273,7 +356,8 @@ public final class PacketListener implements Listener {
         } else if (event.getPacket() instanceof ItemStackRequestPacket packet) {
             inventoryMoveCheck.handleRequest(playerData, packet, System.nanoTime());
         } else if (event.getPacket() instanceof InventoryTransactionPacket packet) {
-            trackItemUseState(player, playerData, packet);
+            inspectPlaceReach(event, player, playerData, packet);
+            trackItemUseState(event, player, playerData, packet);
             trackGlideBoost(player, playerData, packet);
             inspectCombat(event, player, packet);
         }
@@ -580,6 +664,18 @@ public final class PacketListener implements Listener {
                 data.acknowledgeVelocities(List.of(velocity));
                 data.motion.knockback(new FloatVector((float) velocity.x(),
                         (float) velocity.y(), (float) velocity.z()));
+                if (data.meleeKnockbackPending) {
+                    data.meleeKnockbackPending = false;
+                    // a hit that carries no impulse has nothing to measure, and arming it would burn
+                    // the window the next real one needs
+                    if (velocity.x() == 0.0 && velocity.z() == 0.0) {
+                        return;
+                    }
+                    data.expectedMeleeKnockback = velocity;
+                    data.meleeKnockbackTicks = VELOCITY_OBSERVE_TICKS;
+                    data.meleeKnockbackObserved = 0.0;
+                    data.meleeKnockbackExpected = 0.0;
+                }
             });
             return;
         }
@@ -603,6 +699,20 @@ public final class PacketListener implements Listener {
         if (data == null || data.pendingFallTick < 0) return;
         data.fallDamageObserved = true;
         data.observedFallDamage = event.getFinalDamage();
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onMeleeDamage(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof Player player)
+                || event.getCause() != EntityDamageEvent.DamageCause.ENTITY_ATTACK
+                || !(event.getDamager() instanceof EntityLiving)) {
+            return;
+        }
+        PlayerData data = players.get(player.getUniqueId());
+        if (data == null || !data.joined) {
+            return;
+        }
+        data.meleeKnockbackPending = true;
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -752,6 +862,8 @@ public final class PacketListener implements Listener {
                         || data.motion.collideZ();
                 data.penetratedLastFrame = data.motion.penetratedLastFrame();
                 data.stuckInCollider = data.motion.stuckInCollider();
+                inspectGroundSpoof(event, player, data, clientPosition);
+                measureMeleeKnockback(event, player, data, result, observedMovement);
                 accumulateSimulationOffset(event, player, data, result);
                 if (result.correctionRequired() && !data.nearServerMotionTick) {
                     data.simulationMismatchFrames++;
@@ -914,10 +1026,9 @@ public final class PacketListener implements Listener {
             fail(event, player, data, CheckType.KILL_AURA_A, 1, "invalid target", true);
             return;
         }
-        if (!(target instanceof Player)) return;
         if (data.inGrace()) return;
         var clientEntity = data.clientEntities.view(target.getId());
-        if (clientEntity != null && clientEntity.player() && clientEntity.ticksSinceTeleport() <= 10) return;
+        if (clientEntity != null && clientEntity.ticksSinceTeleport() <= 10) return;
         var settings = plugin.settings();
         double expansion = Math.max(0, settings.combatBboxExpansion());
         double leniency = Math.max(0, settings.combatReachLeniency());
@@ -927,13 +1038,14 @@ public final class PacketListener implements Listener {
         double closeAngle = Math.max(0, settings.combatCloseRangeAngle());
         CombatPredictionResult result = combatPredictor.predict(player, data, target,
                 expansion, leniency, steps, maximumAngle, closeRange, closeAngle, data.touchInput);
-        if (result.rawDistance() > 2.9) {
+        if (result.rawDistance() > CombatPredictor.SURVIVAL_REACH + leniency) {
             fail(event, player, data, CheckType.REACH_A, 1,
                     "raw=" + NetworkCheckSupport.format(result.rawDistance()) + " ray=" + NetworkCheckSupport.format(result.rayDistance()), true);
-        } else if (!result.raycastHit() || result.angle() > maximumAngle) {
+        } else if (target instanceof Player
+                && (!result.raycastHit() || result.angle() > maximumAngle)) {
             fail(event, player, data, CheckType.HITBOX_A, 1,
                     "angle=" + NetworkCheckSupport.format(result.angle()) + " raw=" + NetworkCheckSupport.format(result.rawDistance()), true);
-        } else if (!result.valid()) {
+        } else if (target instanceof Player && !result.valid()) {
             fail(event, player, data, CheckType.REACH_A, 1,
                     "ray=" + NetworkCheckSupport.format(result.rayDistance()) + " raw=" + NetworkCheckSupport.format(result.rawDistance()), true);
         }
@@ -949,10 +1061,39 @@ public final class PacketListener implements Listener {
         }
     }
 
-    private void trackItemUseState(Player player, PlayerData data,
+    /** The same distance rule as BreakReach-A, measured from the eye to the middle of the target block. */
+    private void inspectPlaceReach(PacketReceiveEvent event, Player player, PlayerData data,
                                    InventoryTransactionPacket packet) {
-        if (packet.getTransaction() instanceof ItemReleaseInventoryTransaction) {
+        if (!(packet.getTransaction() instanceof ItemUseInventoryTransaction transaction)
+                || transaction.getActionType() != ItemUseActionType.PLACE
+                || data.inGrace() || data.hasMovementCorrection() || data.hasPendingTeleport()) {
+            return;
+        }
+
+        Vector3i block = transaction.getPosition();
+        if (block == null) {
+            return;
+        }
+
+        double eyeX = data.lastPosition != null ? data.lastPosition.getX() : player.getX();
+        double eyeY = data.lastPosition != null ? data.lastPosition.getY()
+                : player.getY() + player.getEyeHeight();
+        double eyeZ = data.lastPosition != null ? data.lastPosition.getZ() : player.getZ();
+
+        double reach = Math.sqrt(MovementCheckSupport.squared(eyeX, eyeY, eyeZ,
+                block.getX() + 0.5, block.getY() + 0.5, block.getZ() + 0.5));
+        double maximumReach = Math.min(7.0, Math.max(1.0, plugin.settings().blocksMaxReach()));
+        if (reach > maximumReach) {
+            fail(event, player, data, CheckType.PLACE_REACH_A, 1,
+                    "distance=" + NetworkCheckSupport.format(reach), true);
+        }
+    }
+
+    private void trackItemUseState(PacketReceiveEvent event, Player player, PlayerData data,
+                                   InventoryTransactionPacket packet) {
+        if (packet.getTransaction() instanceof ItemReleaseInventoryTransaction release) {
             data.motion.consuming(false);
+            inspectFastUse(event, player, data, release);
             return;
         }
         if (!(packet.getTransaction() instanceof ItemUseInventoryTransaction transaction)
@@ -960,10 +1101,30 @@ public final class PacketListener implements Listener {
             return;
         }
         Item item = player.getInventory().getItemInMainHand();
-        if (item != null && !item.isNull() && item.isConsumable()
-                && item.getUseDuration() > 0.0f) {
-            data.motion.consuming(true);
+        if (item != null && !item.isNull() && item.isConsumable()) {
+            data.itemUseStartTick = data.lastTick;
+            if (item.getUseDuration() > 0.0f) {
+                data.motion.consuming(true);
+            }
         }
+    }
+
+    /** No food or potion finishes in no time. */
+    private void inspectFastUse(PacketReceiveEvent event, Player player, PlayerData data,
+                                ItemReleaseInventoryTransaction release) {
+        long start = data.itemUseStartTick;
+        data.itemUseStartTick = Long.MIN_VALUE;
+        if (start == Long.MIN_VALUE || data.inGrace()
+                || release.getActionType() != ItemReleaseActionType.USE) {
+            return;
+        }
+
+        long ticks = data.lastTick - start;
+        if (ticks >= FAST_USE_MINIMUM_TICKS) {
+            return;
+        }
+
+        fail(event, player, data, CheckType.FAST_USE_A, 1, "ticks=" + ticks, true, false);
     }
 
     private void inspectVehicleMovement(PacketReceiveEvent event, Player player, PlayerData data,
@@ -1368,6 +1529,117 @@ public final class PacketListener implements Listener {
      * accumulates the offset the simulation could not explain so a small but persistent divergence —
      * which is exactly what flight and speed look like — eventually flags on its own.
      */
+    /**
+     * A melee knockback is a vector the server computed itself, so the share of it the client actually
+     * travelled is a ratio rather than a distance, and a ratio does not move with latency. Reducing
+     * knockback is the whole point of the cheat, so a client that keeps travelling well under its own
+     * impulse is the signal.
+     */
+    /**
+     * Claiming to stand on air is what a NoFall rewrite produces, and the same lie carries step, some
+     * flight, and walking on water. The world is asked directly rather than the simulation, so a
+     * prediction that drifted cannot make this fire.
+     */
+    private void inspectGroundSpoof(PacketReceiveEvent event, Player player, PlayerData data,
+                                    Vector3f position) {
+        if (data.inGrace() || player.getAllowFlight() || player.isFlying()
+                || player.isSpectator() || player.getRiding() != null
+                || !data.motion.client().verticalCollision()
+                || MovementCheckSupport.serverGround(player, position)) {
+            data.groundSpoofBuffer = 0;
+            return;
+        }
+
+        data.groundSpoofBuffer++;
+        if (data.groundSpoofBuffer < GROUND_SPOOF_TICKS) {
+            return;
+        }
+
+        data.groundSpoofBuffer = 0;
+        fail(event, player, data, CheckType.GROUND_SPOOF_A, 1,
+                "position=" + position, false, false);
+    }
+
+    private void measureMeleeKnockback(PacketReceiveEvent event, Player player, PlayerData data,
+                                       MovementPipelineResult result, Vec3 observedMovement) {
+        if (data.meleeKnockbackTicks <= 0 || data.expectedMeleeKnockback == null) {
+            return;
+        }
+
+        // The simulation already applies the impulse through cobwebs, walls, fluids and everything
+        // else that legitimately absorbs it, so what it predicts is the only fair thing to compare
+        // against. A tick it could not model at all says nothing either way.
+        if (!result.reliable() || data.hasMovementCorrection() || data.hasPendingTeleport()) {
+            data.meleeKnockbackTicks = 0;
+            data.expectedMeleeKnockback = null;
+            return;
+        }
+
+        double previousX = result.clientPosition().x() - observedMovement.x();
+        double previousZ = result.clientPosition().z() - observedMovement.z();
+        double predictedX = result.authoritativePosition().x() - previousX;
+        double predictedZ = result.authoritativePosition().z() - previousZ;
+
+        data.meleeKnockbackTicks--;
+        data.meleeKnockbackExpected += Math.sqrt(predictedX * predictedX + predictedZ * predictedZ);
+        data.meleeKnockbackObserved += Math.sqrt(observedMovement.x() * observedMovement.x()
+                + observedMovement.z() * observedMovement.z());
+        if (data.meleeKnockbackTicks > 0) {
+            return;
+        }
+
+        Vec3 expected = data.expectedMeleeKnockback;
+        data.expectedMeleeKnockback = null;
+
+        double horizontal = Math.sqrt(expected.x() * expected.x() + expected.z() * expected.z());
+        double travelled = data.meleeKnockbackExpected;
+        if (travelled < 0.3) {
+            return;
+        }
+
+        double ratio = data.meleeKnockbackObserved / travelled;
+        if (ratio >= VELOCITY_MINIMUM_RATIO && ratio <= VELOCITY_MAXIMUM_RATIO) {
+            data.velocityBuffer = Math.max(0.0, data.velocityBuffer - 1.0);
+            return;
+        }
+
+        // an amplified impulse carries the player further than it should, so there is nothing to give
+        // back; the position check is what pulls them in
+        if (ratio < VELOCITY_MINIMUM_RATIO) {
+            reapplyMissingKnockback(player, data, expected, horizontal,
+                    travelled - data.meleeKnockbackObserved);
+        }
+        data.velocityBuffer++;
+        if (data.velocityBuffer < VELOCITY_BUFFER) {
+            return;
+        }
+
+        data.velocityBuffer = 0.0;
+        fail(event, player, data, CheckType.VELOCITY_A, 1,
+                "ratio=" + NetworkCheckSupport.format(ratio)
+                        + " expected=" + NetworkCheckSupport.format(travelled)
+                        + " observed=" + NetworkCheckSupport.format(data.meleeKnockbackObserved),
+                false, false);
+    }
+
+    /**
+     * Moves the player the distance the impulse should have carried them. Resending the motion would
+     * be refused the same way the first one was: a client that ignores knockback ignores every motion
+     * packet, while a position is the server's to decide.
+     */
+    private void reapplyMissingKnockback(Player player, PlayerData data, Vec3 expected,
+                                         double horizontal, double missingDistance) {
+        if (horizontal < 1.0E-4 || missingDistance < VELOCITY_MINIMUM_PUSH) {
+            return;
+        }
+
+        double push = Math.min(missingDistance, VELOCITY_MAXIMUM_PUSH);
+        double x = player.getX() + expected.x() / horizontal * push;
+        double z = player.getZ() + expected.z() / horizontal * push;
+        directTeleportSetback(player, data, x, player.getY(), z, player.isOnGround(),
+                "knockback push=" + NetworkCheckSupport.format(push), false);
+    }
+
     private void accumulateSimulationOffset(PacketReceiveEvent event, Player player,
                                             PlayerData data, MovementPipelineResult result) {
         // an offset measured without re-anchoring is drift carried over from earlier ticks, and
@@ -1392,6 +1664,11 @@ public final class PacketListener implements Listener {
         double tolerance = plugin.settings().predictionTolerance();
         if (data.nearServerMotionTick) {
             tolerance *= 4.0;
+        }
+        // The impulse tick resynchronises the velocity, the ones after it do not, so the flight that
+        // follows a hit carries whatever the two disagreed on until the player lands.
+        if (result.ticksSinceImpulse() < IMPULSE_TOLERANCE_TICKS) {
+            tolerance *= 3.0;
         }
 
         double excess = Math.max(0.0, result.offset() - tolerance);
@@ -1418,10 +1695,12 @@ public final class PacketListener implements Listener {
                         + " predicted=" + result.authoritativePosition()
                         + " ground=" + result.onGround()
                         + " support=" + result.supportingBlock() + "@" + result.supportingBlockY()
+                        + " below=" + result.blockBelow()
                         + " vy=" + NetworkCheckSupport.format((float) result.authoritativeVelocity().y())
                         + (result.inFluid() ? " fluid" : "")
                         + (result.impulseApplied() ? " kb-applied" : "")
                         + (result.impulseDeferred() ? " kb-deferred" : "")
+                        + (result.ticksSinceImpulse() < 40 ? " kb-age=" + result.ticksSinceImpulse() : "")
                         + (data.nearServerMotionTick ? " impulse" : "")
                         + " tick=" + result.tick(), false, false);
 
@@ -1466,13 +1745,18 @@ public final class PacketListener implements Listener {
     }
 
     private void scheduleMovementCorrection(Player player, PlayerData data) {
+        scheduleMovementCorrection(player, data, true);
+    }
+
+    /** {@code alert} is false when the check that asked for the correction already reported itself. */
+    private void scheduleMovementCorrection(Player player, PlayerData data, boolean alert) {
         Vec3 position = data.lastVerifiedPosition;
         if (position == null) return;
         if (!data.beginMovementCorrection()) return;
         directTeleportSetback(player, data, position.x(),
                 position.y() - MovementConstants.CORRECTION_HEIGHT_OFFSET, position.z(),
                 data.predictedOnGround,
-                "position=" + position + " tick=" + Math.max(0, data.lastTick));
+                "position=" + position + " tick=" + Math.max(0, data.lastTick), alert);
     }
 
     /**
@@ -1501,6 +1785,13 @@ public final class PacketListener implements Listener {
     private void directTeleportSetback(Player player, PlayerData data,
                                        double x, double y, double z, boolean onGround,
                                        String detail) {
+        directTeleportSetback(player, data, x, y, z, onGround, detail, true);
+    }
+
+    /** {@code alert} is false for a correction that is not itself a detection. */
+    private void directTeleportSetback(Player player, PlayerData data,
+                                       double x, double y, double z, boolean onGround,
+                                       String detail, boolean alert) {
         Runnable send = () -> {
             if (!player.isOnline()) {
                 data.finishMovementCorrection();
@@ -1535,7 +1826,7 @@ public final class PacketListener implements Listener {
                 return;
             }
             data.safeLocation = player.getLocation();
-            if (data.beginSimulationCorrectionEpisode()) {
+            if (alert && data.beginSimulationCorrectionEpisode()) {
                 double vl = data.violations.merge(CheckType.SIMULATION.id(), 1.0, Double::sum);
                 plugin.alert(player, CheckType.SIMULATION, vl, detail);
                 data.lastAlertNanos = System.nanoTime();
@@ -1549,12 +1840,16 @@ public final class PacketListener implements Listener {
     }
 
     private void kick(Player player, PlayerData data) {
+        kick(player, data, "Invalid packet");
+    }
+
+    private void kick(Player player, PlayerData data, String reason) {
         if (data.kickScheduled) {
             return;
         }
         data.kickScheduled = true;
         plugin.getServer().getScheduler().scheduleTask(plugin, () -> {
-            if (player.isOnline()) player.kick("Invalid packet");
+            if (player.isOnline()) player.kick(reason);
         });
     }
 

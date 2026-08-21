@@ -27,7 +27,10 @@ public final class AuthoritativeMotionState {
     private float defaultMovementSpeed = 0.1f;
     private float airSpeed = 0.02f;
 
+    private static final int MAX_KNOCKBACK_DEFERRALS = 2;
+
     private long ticksSinceKnockback = Long.MAX_VALUE;
+    private int knockbackDeferrals;
     private long ticksSinceTeleport = Long.MAX_VALUE;
     private int teleportCompletionTicks;
     private int pendingTeleports;
@@ -276,6 +279,10 @@ public final class AuthoritativeMotionState {
         return ticksSinceTeleport <= teleportCompletionTicks;
     }
 
+    public long ticksSinceKnockback() {
+        return ticksSinceKnockback;
+    }
+
     public boolean hasKnockback() {
         return ticksSinceKnockback == 0;
     }
@@ -285,11 +292,19 @@ public final class AuthoritativeMotionState {
      * it, which is not always the tick the server armed it on, and spending it early moves the
      * simulation a whole impulse ahead of the player.
      */
-    public void deferKnockback() {
-        if (ticksSinceKnockback == 0) {
-            // finishInput advances this by one, so -1 leaves the impulse armed for the next tick
-            ticksSinceKnockback = -1;
+    /**
+     * Holding an impulse back is only ever a few ticks of latency. Left unbounded, a client that never
+     * applies one keeps winning the deferred branch, and the simulation ends up agreeing that no
+     * knockback happened at all.
+     */
+    public boolean deferKnockback() {
+        if (ticksSinceKnockback != 0 || knockbackDeferrals >= MAX_KNOCKBACK_DEFERRALS) {
+            return false;
         }
+        knockbackDeferrals++;
+        // finishInput advances this by one, so -1 leaves the impulse armed for the next tick
+        ticksSinceKnockback = -1;
+        return true;
     }
 
     public boolean claimRawJumpGrace(boolean rawJumpPressed) {
@@ -310,6 +325,7 @@ public final class AuthoritativeMotionState {
 
     public void knockback(FloatVector knockback) {
         this.knockback = knockback;
+        knockbackDeferrals = 0;
         ticksSinceKnockback = 0;
     }
 

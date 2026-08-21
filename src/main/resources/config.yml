@@ -27,7 +27,9 @@ combat:
   interpolation-steps: 10
   maximum-attack-angle: 85.0
   close-range-fallback: 1.75
-  close-range-angle: 35.0
+  # Angle allowed by the short-range fallback. Kept wide because a small position error becomes a
+  # large angle when the target is close.
+  close-range-angle: 60.0
 blocks:
   max-reach: 7.0
   break-leniency-ms: 75

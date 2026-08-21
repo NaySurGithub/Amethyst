@@ -18,6 +18,7 @@ public final class NetworkTimeline {
     private long stackLatencyNanos;
     private int allowedInputs = 65535;
     private int overBudgetInputs;
+    private int inputCount;
     private boolean receivedFirstInput;
     private long acknowledgmentDivider = 1_000_000L;
     private final List<Runnable> currentAcknowledgments = new ArrayList<>();
@@ -56,6 +57,7 @@ public final class NetworkTimeline {
             overBudgetInputs++;
         }
         clientTick++;
+        inputCount++;
         int elapsedTicks = (int) Math.max(1, Math.min(20, serverTick - lastInputServerTick));
         lastInputServerTick = serverTick;
         return elapsedTicks;
@@ -64,6 +66,13 @@ public final class NetworkTimeline {
     public synchronized int drainOverBudgetInputs() {
         int total = overBudgetInputs;
         overBudgetInputs = 0;
+        return total;
+    }
+
+    /** Frames received since the last call, to be compared against the ticks that elapsed. */
+    public synchronized int drainInputCount() {
+        int total = inputCount;
+        inputCount = 0;
         return total;
     }
 

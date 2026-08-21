@@ -1,6 +1,7 @@
 package nay.amethyst.check.packet;
 
 import nay.amethyst.check.scaffold.ScaffoldCheck;
+import nay.amethyst.check.scaffold.WeirdPlaceCheck;
 import nay.amethyst.check.type.CheckType;
 import nay.amethyst.data.player.PlayerData;
 import org.cloudburstmc.math.vector.Vector2f;
@@ -100,6 +101,10 @@ public final class BadPacketCheck {
                                           boolean validateInventoryFace) {
         ScaffoldCheck.Result scaffold = ScaffoldCheck.inspect(player, data, transaction);
         if (scaffold != null) return result(CheckType.SCAFFOLD_A, scaffold.detail());
+        if (transaction.getActionType() == ItemUseActionType.PLACE) {
+            WeirdPlaceCheck.Result weird = WeirdPlaceCheck.inspect(player, data, transaction);
+            if (weird != null) return result(CheckType.WEIRD_PLACE_A, weird.detail());
+        }
         if (!hotbarSlot(transaction.getSlot())) {
             return result(CheckType.BAD_PACKET_I, "hotbar-slot=" + transaction.getSlot());
         }

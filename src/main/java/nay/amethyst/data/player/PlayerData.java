@@ -45,6 +45,23 @@ public final class PlayerData {
     public volatile boolean movementPacketDropped;
     /** Set once a kick is on its way, so a packet flood does not queue hundreds of them. */
     public volatile boolean kickScheduled;
+    /** Set by a melee hit, so only that knockback is measured and not a projectile or an explosion. */
+    public volatile boolean meleeKnockbackPending;
+    /** The impulse the server sent for a melee hit, and how many ticks are left to observe it. */
+    public Vec3 expectedMeleeKnockback;
+    public int meleeKnockbackTicks;
+    public double meleeKnockbackObserved;
+    public double meleeKnockbackExpected;
+    public double velocityBuffer;
+    /** Client frames received beyond the tick budget, accumulated and decayed like the others. */
+    public double timerBuffer;
+    public int timerWarmup;
+    public int timerInputs;
+    public int timerTicks;
+    /** Consecutive ticks the client claimed ground with nothing under it. */
+    public int groundSpoofBuffer;
+    /** Client tick a consumable started being used, to catch one finished in no time at all. */
+    public long itemUseStartTick = Long.MIN_VALUE;
     /**
      * The last place the player stood that the simulation agreed with. Since the simulation restarts
      * from the client every tick, its own position is never more than one tick away from wherever the
@@ -382,6 +399,18 @@ public final class PlayerData {
         nearServerMotionTick = false;
         lastVerifiedPosition = null;
         lastVerifiedVehiclePosition = null;
+        meleeKnockbackPending = false;
+        expectedMeleeKnockback = null;
+        meleeKnockbackTicks = 0;
+        meleeKnockbackObserved = 0.0;
+        meleeKnockbackExpected = 0.0;
+        velocityBuffer = 0.0;
+        timerBuffer = 0.0;
+        timerWarmup = 0;
+        timerInputs = 0;
+        timerTicks = 0;
+        groundSpoofBuffer = 0;
+        itemUseStartTick = Long.MIN_VALUE;
         directSetback = null;
         resetMovementPipeline();
         lastGroundedInputSequence = -1;

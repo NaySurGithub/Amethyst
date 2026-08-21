@@ -97,20 +97,34 @@ changement qu'une fois que le client l'a réellement vu.
 | Check | Ce que ça veut dire |
 | --- | --- |
 | `Simulation` | Un déplacement que la simulation physique n'a pas pu expliquer. Alimente le tampon et pilote les setbacks. |
-| `Vehicle-A` | Un bateau, un wagonnet ou une monture qui ne correspond pas à sa propre prédiction. |
+| `Velocity-A` | Un knockback de mêlée que le joueur n'a pas parcouru, ou largement dépassé. La part manquante lui est rendue en le déplaçant. |
+| `Timer` | Plus de frames client que de ticks écoulés, signature d'un client qui accélère sa propre simulation. |
+| `Vehicle-A` | Un bateau, un wagonnet ou une monture qui ne correspond pas à sa prédiction. C'est le véhicule qui est renvoyé, pas son passager. |
 | `NoFall-A` | Des dégâts de chute qui ne correspondent pas à la chute simulée. |
+| `GroundSpoof-A` | Le client annonce une collision verticale avec rien sous lui. |
 | `KillAura-A` | Cible ou séquence d'attaque invalide. |
 | `Reach-A` | Cible frappée au-delà de la portée, mesurée contre sa boîte rembobinée. |
-| `Hitbox-A` | Le rayon de visée n'a jamais croisé la cible. |
-| `Break-Reach` | Bloc cassé au-delà de la distance autorisée. |
+| `Hitbox-A` | Le rayon de visée n'a jamais croisé la cible. Joueurs uniquement : la boîte rembobinée d'un mob est trop lissée pour un rayon. |
+| `BreakReach-A` | Bloc cassé au-delà de la distance autorisée. |
+| `PlaceReach-A` | Bloc posé au-delà de cette même distance. |
 | `FastBreak-A` | Bloc détruit avant le temps de minage calculé par le serveur. |
+| `WeirdPlace-A` | Bloc posé contre quelque chose que le joueur ne regardait pas, ou sans le tenir. La pose est refusée. |
 | `Scaffold-A` | Vecteur de clic nul sur une pose initiale déclenchée par l'entrée joueur. |
+| `FastUse-A` | Un consommable terminé en moins de ticks qu'aucun aliment ou potion n'en demande. |
 | `InvMove-A` | Déplacement dirigé pendant une interaction d'inventaire. |
+| `BedrockTool-A` | L'identité du client correspond à un outil connu : modèle figé, version de géométrie vide et skin uniforme. |
 | `BadPacket-A…J` | Champs de paquet malformés ou impossibles : valeurs non finies, ticks périmés, slots, faces, canaux et énumérations invalides. |
 
 Les paquets invalides sont annulés. Des violations de mouvement répétées provoquent un setback vers la dernière
-position vérifiée. `BadPacket-D` et `BadPacket-E` expulsent ; rien d'autre ne le fait, et Amethyst ne bannit
-jamais.
+position vérifiée **au sol** ; un joueur qui n'en a pas encore atteint une reçoit seulement des alertes.
+`Timer` au-delà de quinze violations, `BedrockTool-A` dès la détection, ainsi que `BadPacket-D` et
+`BadPacket-E`, expulsent ; rien d'autre ne le fait, et Amethyst ne bannit jamais.
+
+## 🔌 Pour les développeurs
+
+`PlayerViolationEvent` est déclenché à chaque flag, avant l'envoi de l'alerte. Il porte le joueur, le check, le
+niveau de violation et la même chaîne de détail que l'alerte. L'annuler supprime l'alerte — c'est ainsi qu'un
+autre plugin peut exempter un cas qu'Amethyst ne peut pas connaître.
 
 ## ⚙️ Configuration
 
@@ -164,16 +178,23 @@ vrais trous, et ils sont listés parce qu'un tricheur qui les connaît peut s'en
 | Pistons | Un joueur poussé est déplacé par le serveur, pas par son entrée. |
 | Riptide | Une poussée d'environ 3 blocs par tick que la simulation ne peut pas produire. |
 | Encastré dans un bloc | La façon dont le client s'extrait d'un bloc posé sur lui n'appartient qu'à lui. |
-| Près d'une entité solide | Un bateau flotte et bouge seul, et sa position nous arrive acquittée, donc en retard. |
-| Téléports, respawns, connexions | L'état est reconstruit à destination, avec quelques secondes de grâce. |
+| À moins de 1,5 bloc d'un bateau ou d'un wagonnet | Il flotte et bouge seul, et sa position suivie a un tick de retard. |
+| Téléports, respawns, connexions | L'état est reconstruit à destination, avec deux à trois secondes de grâce. |
+
+Les bateaux, wagonnets et shulkers sont de **vraies collisions** et non des trous : leur type est porté jusqu'au
+suivi d'entités, donc un joueur se tient dessus comme le fait son client.
 
 Le waterwalk reste détecté malgré l'exemption de l'eau, parce que le cheat maintient le joueur *au-dessus* de
 la surface, là où aucun fluide ne croise sa boîte.
 
 ## 🚧 Ce qui n'est pas fini
 
-- **`Timer` et `Velocity-A`** sont annoncés comme des checks et ne peuvent pas se déclencher. Le compteur de
-  budget de ticks dont ils ont besoin existe ; personne ne le consomme.
+- **Escaliers et dalles.** La simulation traverse la demi-marche supérieure : elle s'arrête à 5,5 sur un bloc
+  dont la marche monte à 6,0, donc un joueur posé dessus est corrigé indéfiniment. `BlockStairs` renvoie deux
+  boîtes de collision et une seule survit ; reste à savoir si la perte a lieu à la capture ou dans le moteur.
+- **`GroundSpoof-A`, `FastUse-A`, `WeirdPlace-A`, `PlaceReach-A` et `BedrockTool-A` sont neufs** et n'ont pas
+  subi de passe de faux positifs. Le plus susceptible de faire du bruit est la comparaison de l'objet tenu dans
+  `WeirdPlace-A` : un changement de barre peut tomber au milieu d'une transaction.
 - **Aucun test.** La physique est exactement le genre de code qu'une suite de tests figerait, et il n'y en a
   aucune.
 - **Aucun banc de rejeu.** Chaque diagnostic demande aujourd'hui un redémarrage de serveur et un humain qui
@@ -189,8 +210,13 @@ La ligne d'alerte est l'essentiel. Elle porte l'écart, les deux positions, le d
 simulation croyait avoir sous les pieds du joueur, sa vitesse verticale et le tick :
 
 ```
-failed Simulation (VL 1.0) offset=0.420 client=[…] predicted=[…] ground=true support=minecraft:sand@61 vy=-0.078 tick=334
+failed Simulation (VL 1.0) offset=0.420 client=[…] predicted=[…] ground=true
+  support=minecraft:sand@61 below=minecraft:sand@60/1 vy=-0.078 kb-age=4 tick=334
 ```
+
+`support` est ce que la simulation croyait avoir sous les pieds du joueur, `below` ce que le frame capturé
+contient réellement sous lui et combien de boîtes de collision il en a gardées, et `kb-age` l'ancienneté de la
+dernière impulsion parvenue à la simulation.
 
 Lis-la avant de la signaler - la forme des nombres nomme souvent le bug :
 

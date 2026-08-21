@@ -15,7 +15,7 @@ import org.powernukkitx.math.SimpleAxisAlignedBB;
 import java.util.List;
 
 public final class CombatPredictor {
-    private static final double SURVIVAL_REACH = 2.9;
+    public static final double SURVIVAL_REACH = 3.0;
     private static final double TRACE_LENGTH = 7.0;
 
     public CombatPredictionResult predict(Player player, PlayerData data, Entity target,
@@ -105,7 +105,7 @@ public final class CombatPredictor {
         boolean raycastHit = Double.isFinite(ray);
         boolean inReach = raycastHit && ray <= SURVIVAL_REACH + reachLeniency;
         boolean closeFallback = raw <= closeRangeFallback && angle <= closeRangeAngle;
-        if (!inReach && (rawDistanceFallback || closeFallback)
+        if (!raycastHit && (rawDistanceFallback || closeFallback)
                 && raw <= SURVIVAL_REACH && angle <= maximumAttackAngle) {
             ray = raw;
             raycastHit = true;

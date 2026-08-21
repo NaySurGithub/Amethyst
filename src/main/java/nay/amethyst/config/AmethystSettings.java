@@ -44,7 +44,7 @@ public record AmethystSettings(
                 config.getInt("combat.interpolation-steps", 10),
                 config.getDouble("combat.maximum-attack-angle", 85),
                 config.getDouble("combat.close-range-fallback", 1.75),
-                config.getDouble("combat.close-range-angle", 35),
+                config.getDouble("combat.close-range-angle", 60),
                 config.getDouble("blocks.max-reach", 7),
                 config.getLong("blocks.break-leniency-ms", 75),
                 config.getDouble("setback-violations", 2.0));
