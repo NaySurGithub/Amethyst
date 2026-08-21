@@ -93,6 +93,7 @@ le client l'a réellement vu.
 | `Sprint-A…C` | Un état de sprint que le client ne peut pas légitimement tenir. |
 | `Elytra-A…B` | Un vol plané démarré dans des conditions que le client refuse. |
 | `KillAura-A` | Cible ou séquence d'attaque invalide. |
+| `Autoclicker-A` | Clics sur la dernière seconde au-delà du plafond configuré. Le coup est refusé. |
 | `Reach-A` | Cible attaquée au-delà de la portée autorisée, mesurée contre sa hitbox rembobinée. |
 | `Hitbox-A` | Le rayon de visée n'a jamais croisé la cible. |
 | `BreakReach-A` | Bloc cassé au-delà de la distance autorisée. |
@@ -127,6 +128,7 @@ autre plugin exempte un cas qu'Amethyst ne peut pas connaître.
 | --- | --- |
 | `alerts` | Active les alertes de violation. |
 | `dev-logs` | Ajoute les valeurs de diagnostic à chaque alerte. Désactivé par défaut ; nécessaire pour signaler un faux positif. |
+| `disabled-checks` | Identifiants de checks à désactiver entièrement, écrits comme dans les alertes. |
 | `updates.check` | Vérifie l'existence d'une version plus récente au démarrage. |
 | `setback-violations` | Violations nécessaires avant un setback de mouvement. |
 | `max-packet-actions` | Nombre maximal d'actions de bloc acceptées dans un paquet d'entrée. |
@@ -142,6 +144,8 @@ autre plugin exempte un cas qu'Amethyst ne peut pas connaître.
 | `combat.maximum-attack-angle` | Angle maximal accepté vers la hitbox de la cible. |
 | `combat.close-range-fallback` | Repli courte portée accepté sans lancer de rayon. |
 | `combat.close-range-angle` | Angle maximal autorisé par ce repli. |
+| `combat.cps-limit` | Clics par seconde acceptés au clavier ou à la manette. |
+| `combat.touch-cps-limit` | Clics par seconde acceptés en tactile. |
 | `blocks.max-reach` | Distance maximale acceptée pour une interaction avec un bloc. |
 | `blocks.break-leniency-ms` | Marge réseau sur le temps de minage calculé par le serveur. |
 | `inventory-move.input-threshold` | Entrée directionnelle minimale, dérive de manette exclue. |

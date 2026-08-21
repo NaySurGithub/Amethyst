@@ -72,6 +72,7 @@ public final class AmethystPlugin extends PluginBase {
     }
 
     public void alert(Player suspect, CheckType check, double vl, String detail) {
+        if (settings().disabled(check.id())) return;
         PlayerViolationEvent event = new PlayerViolationEvent(suspect, check, vl, detail);
         getServer().getPluginManager().callEvent(event);
         if (event.isCancelled()) return;

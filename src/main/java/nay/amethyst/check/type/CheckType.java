@@ -18,6 +18,7 @@ public enum CheckType {
     BAD_PACKET_O("BadPacket-O", "The predicted vehicle is not the one being ridden."),
     BAD_PACKET_P("BadPacket-P", "Position outside the bounds of the world."),
     BAD_PACKET_Q("BadPacket-Q", "Chunk radius outside the accepted range."),
+    AUTOCLICKER_A("Autoclicker-A", "Clicked faster than a hand can."),
     INV_MOVE_A("InvMove-A", "Directed movement during an inventory interaction."),
     TIMER("Timer", "The client sent more frames than its network credit allows."),
     SIMULATION("Simulation", "The server corrected movement that did not match its simulation.", true),

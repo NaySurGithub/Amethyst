@@ -89,6 +89,7 @@ acknowledgement-gated, so the simulation only adopts a change once the client ha
 | `Sprint-A…C` | A sprint state the client cannot legitimately hold. |
 | `Elytra-A…B` | A glide started in conditions the client refuses. |
 | `KillAura-A` | Invalid attack target or attack sequence. |
+| `Autoclicker-A` | Clicks over the last second beyond the configured ceiling. The hit is refused. |
 | `Reach-A` | Target attacked beyond the allowed reach, measured against its rewound hitbox. |
 | `Hitbox-A` | The sight ray never intersected the target. |
 | `BreakReach-A` | Block broken beyond the allowed distance. |
@@ -123,6 +124,7 @@ another plugin exempts a case Amethyst cannot know about.
 | --- | --- |
 | `alerts` | Enables violation alerts. |
 | `dev-logs` | Adds diagnostic values to every alert. Off by default; needed to report a false positive. |
+| `disabled-checks` | Check ids to turn off entirely, written as they appear in the alerts. |
 | `updates.check` | Checks for a newer release on startup. |
 | `setback-violations` | Violations required before a movement setback. |
 | `max-packet-actions` | Maximum block actions accepted in one input packet. |
@@ -138,6 +140,8 @@ another plugin exempts a case Amethyst cannot know about.
 | `combat.maximum-attack-angle` | Maximum accepted angle toward the target hitbox. |
 | `combat.close-range-fallback` | Short-range fallback accepted without a raycast. |
 | `combat.close-range-angle` | Maximum angle allowed by that fallback. |
+| `combat.cps-limit` | Clicks per second accepted from a keyboard or controller. |
+| `combat.touch-cps-limit` | Clicks per second accepted from touch input. |
 | `blocks.max-reach` | Maximum accepted block interaction distance. |
 | `blocks.break-leniency-ms` | Network leniency on the server-calculated mining time. |
 | `inventory-move.input-threshold` | Minimum directional input, excluding controller drift. |

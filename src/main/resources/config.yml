@@ -2,6 +2,11 @@ alerts: true
 # Adds the offset, both positions and the simulation state to every alert. Needed to report a false
 # positive, noisy for everyday use.
 dev-logs: false
+# Check ids to turn off entirely, as written in the alerts. Example:
+# disabled-checks:
+#   - Autoclicker-A
+#   - Timer
+disabled-checks: []
 updates:
   check: true
 setback-violations: 2.0
@@ -33,6 +38,8 @@ combat:
   # Angle allowed by the short-range fallback. Kept wide because a small position error becomes a
   # large angle when the target is close.
   close-range-angle: 60.0
+  cps-limit: 24
+  touch-cps-limit: 24
 blocks:
   max-reach: 7.0
   break-leniency-ms: 75

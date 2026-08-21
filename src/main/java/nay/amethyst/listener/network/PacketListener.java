@@ -34,6 +34,8 @@ import org.cloudburstmc.math.vector.Vector3f;
 import org.cloudburstmc.math.vector.Vector3i;
 import org.cloudburstmc.protocol.bedrock.data.PlayerActionType;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerActionPacket;
+import org.cloudburstmc.protocol.bedrock.packet.AnimatePacket;
+import org.cloudburstmc.protocol.bedrock.data.payload.inventory.transaction.ItemUseTriggerType;
 import org.cloudburstmc.protocol.bedrock.packet.InteractPacket;
 import org.cloudburstmc.protocol.bedrock.data.PlayerAuthInputData;
 import org.cloudburstmc.protocol.bedrock.data.AbilitiesIndex;
@@ -394,16 +396,33 @@ public final class PacketListener implements Listener {
             return;
         }
         if (event.getPacket() instanceof PlayerAuthInputPacket packet) {
-            if (packet.getClientTick() > playerData.lastTick) playerData.clientEntities.tick();
+            if (packet.getClientTick() > playerData.lastTick) {
+                playerData.clientEntities.tick();
+                playerData.tickClicks();
+            }
             inspectInventoryMove(event, player, playerData, packet);
             inspectMovement(event, player, packet);
         } else if (event.getPacket() instanceof ItemStackRequestPacket packet) {
             inventoryMoveCheck.handleRequest(playerData, packet, System.nanoTime());
+        } else if (event.getPacket() instanceof AnimatePacket packet) {
+            if (packet.getAction() == AnimatePacket.Action.SWING) {
+                playerData.clickLeft();
+            }
         } else if (event.getPacket() instanceof PlayerActionPacket packet) {
             inspectPlayerAction(event, player, playerData, packet);
         } else if (event.getPacket() instanceof InteractPacket packet) {
             inspectInteract(event, player, playerData, packet);
         } else if (event.getPacket() instanceof InventoryTransactionPacket packet) {
+            if (packet.getTransaction() instanceof ItemUseInventoryTransaction use
+                    && use.getTriggerType() == ItemUseTriggerType.PLAYER_INPUT
+                    && inspectClickRate(event, player, playerData, playerData.clickRight(), "right")) {
+                return;
+            }
+            if (packet.getTransaction() instanceof ItemUseOnActorInventoryTransaction attack
+                    && attack.getActionType() == ItemUseOnActorActionType.ATTACK
+                    && inspectClickRate(event, player, playerData, playerData.leftCps(), "left")) {
+                return;
+            }
             inspectBadSlot(event, player, playerData, packet);
             inspectPlaceReach(event, player, playerData, packet);
             trackItemUseState(event, player, playerData, packet);
@@ -1598,6 +1617,20 @@ public final class PacketListener implements Listener {
         data.clearSpearLungeCandidate();
     }
 
+    /** Refuses the action when clicks over the last second exceed the configured ceiling. */
+    private boolean inspectClickRate(PacketReceiveEvent event, Player player, PlayerData data,
+                                     int clicks, String hand) {
+        int limit = data.touchInput
+                ? plugin.settings().combatTouchCpsLimit()
+                : plugin.settings().combatCpsLimit();
+        if (limit <= 0 || clicks <= limit || data.inGrace()) {
+            return false;
+        }
+        fail(event, player, data, CheckType.AUTOCLICKER_A, 1,
+                hand + " cps=" + clicks + " of " + limit, true, false);
+        return true;
+    }
+
     /** Refuses a wake-up or a respawn the player's state cannot justify. */
     private void inspectPlayerAction(PacketReceiveEvent event, Player player, PlayerData data,
                                      PlayerActionPacket packet) {
@@ -1897,7 +1930,8 @@ public final class PacketListener implements Listener {
 
     public void handleEarlyMovementRejection(Player player, MovementPreValidationResult result) {
         if (result.check() == null || !player.isOnline()
-                || player.hasPermission("amethyst.bypass")) return;
+                || player.hasPermission("amethyst.bypass")
+                || plugin.settings().disabled(result.check().id())) return;
         PlayerData data = players.get(player.getUniqueId());
         if (data == null || !data.joined) return;
         data.movementPacketDropped = true;
@@ -1915,6 +1949,9 @@ public final class PacketListener implements Listener {
 
     private void fail(PacketReceiveEvent event, Player player, PlayerData data, CheckType check,
                       double amount, String detail, boolean cancel, boolean setback) {
+        if (plugin.settings().disabled(check.id())) {
+            return;
+        }
         double vl = data.violations.merge(check.id(), amount, Double::sum);
         long now = System.nanoTime();
         if (now - data.lastAlertNanos > 300_000_000L) {

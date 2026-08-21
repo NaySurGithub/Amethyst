@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 public final class PlayerData {
+    private static final int CLICK_WINDOW_TICKS = 20;
     public static final long SPEAR_LUNGE_SEQUENCE = Long.MAX_VALUE - 1;
     public static final long SERVER_MOTION_SEQUENCE = Long.MAX_VALUE - 2;
     public static final long SERVER_MOTION_STOP_SEQUENCE = Long.MAX_VALUE - 3;
@@ -57,6 +58,11 @@ public final class PlayerData {
     public long lastSleepingTick = Long.MIN_VALUE;
     public boolean inBed;
     public int vehicleClaimBuffer;
+    private final int[] leftClicks = new int[CLICK_WINDOW_TICKS];
+    private final int[] rightClicks = new int[CLICK_WINDOW_TICKS];
+    private int clickSlot;
+    private int leftCps;
+    private int rightCps;
     public long lastGlideStartTick = Long.MIN_VALUE;
     public long itemUseStartTick = Long.MIN_VALUE;
     /** Last ground position the simulation agreed with, and the target of a setback. */
@@ -282,6 +288,29 @@ public final class PlayerData {
     public synchronized void clearWindChargeCandidates() {
         windChargeCandidates = List.of();
         windChargeUntilInputSequence = 0;
+    }
+
+    /** Drops the oldest tick of the rolling second and opens a fresh one. */
+    public synchronized void tickClicks() {
+        clickSlot = (clickSlot + 1) % CLICK_WINDOW_TICKS;
+        leftCps -= leftClicks[clickSlot];
+        rightCps -= rightClicks[clickSlot];
+        leftClicks[clickSlot] = 0;
+        rightClicks[clickSlot] = 0;
+    }
+
+    public synchronized void clickLeft() {
+        leftClicks[clickSlot]++;
+        leftCps++;
+    }
+
+    public synchronized int clickRight() {
+        rightClicks[clickSlot]++;
+        return ++rightCps;
+    }
+
+    public synchronized int leftCps() {
+        return leftCps;
     }
 
     public synchronized void setSpearLungeCandidate(Vec3 candidate) {

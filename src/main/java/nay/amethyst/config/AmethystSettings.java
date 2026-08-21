@@ -2,6 +2,10 @@ package nay.amethyst.config;
 
 import org.powernukkitx.utils.Config;
 
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+
 public record AmethystSettings(
         double inventoryMoveInputThreshold,
         long inventoryMoveRequestWindowMs,
@@ -21,11 +25,18 @@ public record AmethystSettings(
         double combatMaximumAttackAngle,
         double combatCloseRangeFallback,
         double combatCloseRangeAngle,
+        int combatCpsLimit,
+        int combatTouchCpsLimit,
         double blocksMaxReach,
         long blocksBreakLeniencyMs,
         double setbackViolations,
-        boolean devLogs
+        boolean devLogs,
+        Set<String> disabledChecks
 ) {
+    public boolean disabled(String checkId) {
+        return disabledChecks.contains(checkId.toLowerCase(Locale.ROOT));
+    }
+
     public static AmethystSettings load(Config config) {
         return new AmethystSettings(
                 config.getDouble("inventory-move.input-threshold", 0.075),
@@ -46,9 +57,22 @@ public record AmethystSettings(
                 config.getDouble("combat.maximum-attack-angle", 85),
                 config.getDouble("combat.close-range-fallback", 1.75),
                 config.getDouble("combat.close-range-angle", 60),
+                config.getInt("combat.cps-limit", 24),
+                config.getInt("combat.touch-cps-limit", 24),
                 config.getDouble("blocks.max-reach", 7),
                 config.getLong("blocks.break-leniency-ms", 75),
                 config.getDouble("setback-violations", 2.0),
-                config.getBoolean("dev-logs", false));
+                config.getBoolean("dev-logs", false),
+                disabledChecks(config));
+    }
+
+    private static Set<String> disabledChecks(Config config) {
+        Set<String> disabled = new HashSet<>();
+        for (String entry : config.getStringList("disabled-checks")) {
+            if (entry != null && !entry.isBlank()) {
+                disabled.add(entry.trim().toLowerCase(Locale.ROOT));
+            }
+        }
+        return Set.copyOf(disabled);
     }
 }
