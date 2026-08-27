@@ -88,6 +88,7 @@ import org.powernukkitx.entity.Entity;
 import org.powernukkitx.entity.EntityLiving;
 import org.powernukkitx.entity.projectile.EntityWindCharge;
 import org.powernukkitx.entity.effect.EffectType;
+import org.powernukkitx.event.Cancellable;
 import org.powernukkitx.event.EventHandler;
 import org.powernukkitx.event.EventPriority;
 import org.powernukkitx.event.Listener;
@@ -351,6 +352,30 @@ public final class PacketListener implements Listener {
         applyLocalBlock(event.getPlayer(), event.getBlock());
     }
 
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onBlockPlaceReach(BlockPlaceEvent event) {
+        Player player = event.getPlayer();
+        PlayerData data = players.get(player.getUniqueId());
+        if (data == null || !data.joined || data.inGrace()
+                || data.hasMovementCorrection() || data.hasPendingTeleport()) {
+            return;
+        }
+
+        Block block = event.getBlock();
+        double eyeX = data.lastPosition != null ? data.lastPosition.getX() : player.getX();
+        double eyeY = data.lastPosition != null ? data.lastPosition.getY()
+                : player.getY() + player.getEyeHeight();
+        double eyeZ = data.lastPosition != null ? data.lastPosition.getZ() : player.getZ();
+
+        double reach = Math.sqrt(MovementCheckSupport.squared(eyeX, eyeY, eyeZ,
+                block.getX() + 0.5, block.getY() + 0.5, block.getZ() + 0.5));
+        double maximumReach = Math.min(7.0, Math.max(1.0, plugin.settings().blocksMaxReach()));
+        if (reach > maximumReach) {
+            fail(event, player, data, CheckType.PLACE_REACH_A, 1,
+                    "distance=" + NetworkCheckSupport.format(reach), true);
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
         Block broken = event.getBlock();
@@ -424,7 +449,6 @@ public final class PacketListener implements Listener {
                 return;
             }
             inspectBadSlot(event, player, playerData, packet);
-            inspectPlaceReach(event, player, playerData, packet);
             trackItemUseState(event, player, playerData, packet);
             trackGlideBoost(player, playerData, packet);
             inspectCombat(event, player, packet);
@@ -1168,34 +1192,6 @@ public final class PacketListener implements Listener {
                 "used " + used + " from slot " + slot, true);
     }
 
-    /** Distance from the eye to the middle of the placed block. */
-    private void inspectPlaceReach(PacketReceiveEvent event, Player player, PlayerData data,
-                                   InventoryTransactionPacket packet) {
-        if (!(packet.getTransaction() instanceof ItemUseInventoryTransaction transaction)
-                || transaction.getActionType() != ItemUseActionType.PLACE
-                || data.inGrace() || data.hasMovementCorrection() || data.hasPendingTeleport()) {
-            return;
-        }
-
-        Vector3i block = transaction.getPosition();
-        if (block == null) {
-            return;
-        }
-
-        double eyeX = data.lastPosition != null ? data.lastPosition.getX() : player.getX();
-        double eyeY = data.lastPosition != null ? data.lastPosition.getY()
-                : player.getY() + player.getEyeHeight();
-        double eyeZ = data.lastPosition != null ? data.lastPosition.getZ() : player.getZ();
-
-        double reach = Math.sqrt(MovementCheckSupport.squared(eyeX, eyeY, eyeZ,
-                block.getX() + 0.5, block.getY() + 0.5, block.getZ() + 0.5));
-        double maximumReach = Math.min(7.0, Math.max(1.0, plugin.settings().blocksMaxReach()));
-        if (reach > maximumReach) {
-            fail(event, player, data, CheckType.PLACE_REACH_A, 1,
-                    "distance=" + NetworkCheckSupport.format(reach), true);
-        }
-    }
-
     private void trackItemUseState(PacketReceiveEvent event, Player player, PlayerData data,
                                    InventoryTransactionPacket packet) {
         if (packet.getTransaction() instanceof ItemReleaseInventoryTransaction release) {
@@ -1569,7 +1565,7 @@ public final class PacketListener implements Listener {
                 || insideId.contains("fence") || belowId.contains("fence");
     }
 
-    private void fail(PacketReceiveEvent event, Player player, PlayerData data, CheckType check,
+    private void fail(Cancellable event, Player player, PlayerData data, CheckType check,
                       double amount, String detail, boolean cancel) {
         fail(event, player, data, check, amount, detail, cancel, true);
     }
@@ -1947,7 +1943,7 @@ public final class PacketListener implements Listener {
         }
     }
 
-    private void fail(PacketReceiveEvent event, Player player, PlayerData data, CheckType check,
+    private void fail(Cancellable event, Player player, PlayerData data, CheckType check,
                       double amount, String detail, boolean cancel, boolean setback) {
         if (plugin.settings().disabled(check.id())) {
             return;
