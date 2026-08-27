@@ -15,8 +15,10 @@ import java.util.Set;
 
 public final class ClientEntityTracker {
     private static final double PLAYER_HEIGHT_OFFSET = 1.62;
+    private static final int REMOVED_PROJECTILE_TICKS = 20;
 
     private final Map<Long, TrackedEntity> entities = new HashMap<>();
+    private final Map<Long, Integer> removedProjectiles = new HashMap<>();
     private final List<Update> queuedUpdates = new ArrayList<>();
     private boolean flushScheduled;
 
@@ -30,20 +32,21 @@ public final class ClientEntityTracker {
             "minecraft:command_block_minecart", "minecraft:shulker");
 
     public synchronized void add(long runtimeId, Vector3f position, boolean player,
-                                 ActorDataMap actorData, String identifier) {
+                                 ActorDataMap actorData, String identifier, boolean projectile) {
         if (position == null) return;
         Vec3 converted = vector(position);
+        removedProjectiles.remove(runtimeId);
         entities.put(runtimeId, new TrackedEntity(runtimeId, converted, player,
                 value(actorData, ActorDataTypes.WIDTH, 0.6f),
                 value(actorData, ActorDataTypes.HEIGHT, 1.8f),
                 value(actorData, ActorDataTypes.SCALE, 1.0f),
-                identifier != null && SOLID_TYPES.contains(identifier)));
+                identifier != null && SOLID_TYPES.contains(identifier), projectile));
     }
 
     public synchronized boolean queueAdd(long runtimeId, Vector3f position, boolean player,
-                                         ActorDataMap actorData, String identifier) {
+                                         ActorDataMap actorData, String identifier, boolean projectile) {
         if (position == null) return false;
-        queuedUpdates.add(new SpawnUpdate(runtimeId, position, player, actorData, identifier));
+        queuedUpdates.add(new SpawnUpdate(runtimeId, position, player, actorData, identifier, projectile));
         if (flushScheduled) return false;
         flushScheduled = true;
         return true;
@@ -57,7 +60,10 @@ public final class ClientEntityTracker {
     }
 
     public synchronized void remove(long runtimeId) {
-        entities.remove(runtimeId);
+        TrackedEntity removed = entities.remove(runtimeId);
+        if (removed != null && removed.projectile) {
+            removedProjectiles.put(runtimeId, REMOVED_PROJECTILE_TICKS);
+        }
         queuedUpdates.removeIf(update -> update.runtimeId() == runtimeId);
     }
 
@@ -106,7 +112,8 @@ public final class ClientEntityTracker {
     public synchronized void acknowledge(List<Update> updates) {
         for (Update update : updates) {
             if (update instanceof SpawnUpdate spawn) {
-                add(spawn.runtimeId, spawn.position, spawn.player, spawn.actorData, spawn.identifier);
+                add(spawn.runtimeId, spawn.position, spawn.player, spawn.actorData,
+                        spawn.identifier, spawn.projectile);
                 continue;
             }
             if (update instanceof RemoveUpdate remove) {
@@ -127,6 +134,13 @@ public final class ClientEntityTracker {
 
     public synchronized void tick() {
         for (TrackedEntity entity : entities.values()) entity.tick();
+        removedProjectiles.replaceAll((runtimeId, ticks) -> ticks - 1);
+        removedProjectiles.values().removeIf(ticks -> ticks <= 0);
+    }
+
+    public synchronized boolean isProjectile(long runtimeId) {
+        TrackedEntity entity = entities.get(runtimeId);
+        return (entity != null && entity.projectile) || removedProjectiles.containsKey(runtimeId);
     }
 
     public synchronized ClientEntityView view(long runtimeId) {
@@ -159,6 +173,7 @@ public final class ClientEntityTracker {
 
     public synchronized void clear() {
         entities.clear();
+        removedProjectiles.clear();
         queuedUpdates.clear();
         flushScheduled = false;
     }
@@ -180,7 +195,7 @@ public final class ClientEntityTracker {
     }
 
     public record SpawnUpdate(long runtimeId, Vector3f position, boolean player,
-                              ActorDataMap actorData, String identifier) implements Update {
+                              ActorDataMap actorData, String identifier, boolean projectile) implements Update {
     }
 
     public record RemoveUpdate(long runtimeId) implements Update {
@@ -205,9 +220,10 @@ public final class ClientEntityTracker {
         private double height;
         private double scale;
         private final boolean solid;
+        private final boolean projectile;
 
         private TrackedEntity(long runtimeId, Vec3 position, boolean player,
-                              double width, double height, double scale, boolean solid) {
+                              double width, double height, double scale, boolean solid, boolean projectile) {
             this.runtimeId = runtimeId;
             this.player = player;
             this.previousPosition = position;
@@ -218,6 +234,7 @@ public final class ClientEntityTracker {
             this.height = height;
             this.scale = scale;
             this.solid = solid;
+            this.projectile = projectile;
         }
 
         private void receive(Vec3 received, boolean teleport) {

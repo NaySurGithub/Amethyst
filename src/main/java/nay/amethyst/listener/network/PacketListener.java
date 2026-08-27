@@ -86,6 +86,7 @@ import org.powernukkitx.event.block.BlockBreakEvent;
 import org.powernukkitx.event.block.BlockPlaceEvent;
 import org.powernukkitx.entity.Entity;
 import org.powernukkitx.entity.EntityLiving;
+import org.powernukkitx.entity.projectile.EntityProjectile;
 import org.powernukkitx.entity.projectile.EntityWindCharge;
 import org.powernukkitx.entity.effect.EffectType;
 import org.powernukkitx.event.Cancellable;
@@ -598,15 +599,17 @@ public final class PacketListener implements Listener {
         if (event.getPacket() instanceof AddPlayerPacket packet) {
             if (packet.getTargetRuntimeID() != player.getId()
                     && data.clientEntities.queueAdd(packet.getTargetRuntimeID(), packet.getPosition(),
-                    true, packet.getActorData(), null)) {
+                    true, packet.getActorData(), null, false)) {
                 flushEntityTrackerAfter(event, player, data);
             }
             return;
         }
         if (event.getPacket() instanceof AddActorPacket packet) {
+            Entity entity = player.getLevel().getEntity(packet.getTargetRuntimeID());
             if (packet.getTargetRuntimeID() != player.getId()
                     && data.clientEntities.queueAdd(packet.getTargetRuntimeID(), packet.getPosition(),
-                    false, packet.getActorData(), packet.getActorType())) {
+                    false, packet.getActorData(), packet.getActorType(),
+                    entity instanceof EntityProjectile)) {
                 flushEntityTrackerAfter(event, player, data);
             }
             return;
@@ -1654,7 +1657,8 @@ public final class PacketListener implements Listener {
             return;
         }
         if (player.getLevel().getEntity(target) != null
-                || data.clientEntities.view(target) != null) {
+                || data.clientEntities.view(target) != null
+                || data.clientEntities.isProjectile(target)) {
             return;
         }
         fail(event, player, data, CheckType.BAD_PACKET_M, 2, "target=" + target, true);
