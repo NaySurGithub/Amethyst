@@ -41,7 +41,10 @@ public enum CheckType {
     SPRINT_B("Sprint-B", "Sprinting while using an item."),
     SPRINT_C("Sprint-C", "Started sprinting while blinded."),
     ELYTRA_A("Elytra-A", "Started gliding while riding."),
-    ELYTRA_B("Elytra-B", "Started gliding again too soon.");
+    ELYTRA_B("Elytra-B", "Started gliding again too soon."),
+    CHEST_STEALER_A("ChestStealer-A", "Moved items out of a container too quickly."),
+    AUTO_TOTEM_A("AutoTotem-A", "Swapped a totem into the offhand too quickly after it popped."),
+    MACRO_A("Macro-A", "Click pattern matches automated input heuristics.");
 
     private final String id;
     private final String description;

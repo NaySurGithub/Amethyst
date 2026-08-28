@@ -3,6 +3,7 @@ package nay.amethyst.check.packet;
 import nay.amethyst.check.scaffold.ScaffoldCheck;
 import nay.amethyst.check.scaffold.WeirdPlaceCheck;
 import nay.amethyst.check.type.CheckType;
+import nay.amethyst.data.player.GraceReason;
 import nay.amethyst.data.player.PlayerData;
 import org.cloudburstmc.math.vector.Vector2f;
 import org.cloudburstmc.math.vector.Vector3f;
@@ -107,7 +108,7 @@ public final class BadPacketCheck {
             return result(CheckType.BAD_PACKET_H, "move-vector=" + move);
         }
 
-        if (!data.inGrace() && !data.hasPendingTeleport() && !data.hasMovementCorrection()) {
+        if (!data.inGrace() && !data.inGrace(GraceReason.SERVER_CORRECTION)) {
             Result bounds = inspectPositionBounds(player, packet);
             if (bounds != null) return bounds;
             Result vehicle = inspectVehicleClaim(player, data, packet);

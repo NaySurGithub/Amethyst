@@ -23,6 +23,8 @@ import java.util.Map;
 
 public final class PlayerData {
     private static final int CLICK_WINDOW_TICKS = 20;
+    private static final long PROTOCOL_GRACE_MILLIS = 3000;
+    private static final long VELOCITY_GRACE_MILLIS = 1500;
     public static final long SPEAR_LUNGE_SEQUENCE = Long.MAX_VALUE - 1;
     public static final long SERVER_MOTION_SEQUENCE = Long.MAX_VALUE - 2;
     public static final long SERVER_MOTION_STOP_SEQUENCE = Long.MAX_VALUE - 3;
@@ -76,6 +78,20 @@ public final class PlayerData {
     public boolean inventoryMovePrepared;
     public long inventoryMoveRequestNanos;
     public int inventoryMoveBuffer;
+    public final java.util.ArrayDeque<Long> chestClickTimestamps = new java.util.ArrayDeque<>();
+    public int chestStealerBuffer;
+    public long lastTotemPopNanos;
+    public int autoTotemBuffer;
+    private final long[] macroIntervals = new long[100];
+    private int macroIntervalHead;
+    private int macroIntervalCount;
+    public long lastLeftClickNanos;
+    public int macroCombatClicks;
+    public int macroTotalClicks;
+    public double macroBuffer;
+    public int macroSuspectStreak;
+    public long lastMacroAnalysisNanos;
+    public long lastCombatNanos;
     public long lastTick = -1;
     public long inputSequence;
     public long lastGroundedInputSequence = -1;
@@ -124,7 +140,7 @@ public final class PlayerData {
     public int glideBoostTicks;
     public Location safeLocation;
     public SetActorDataPacket lastActorData;
-    public long graceUntilNanos;
+    private final GracePeriods gracePeriods = new GracePeriods();
     public long lastAlertNanos;
     public long vehicleId = -1;
     public boolean vehicleInputConfirmed;
@@ -167,11 +183,14 @@ public final class PlayerData {
     public synchronized void addPendingTeleport() {
         pendingTeleportAcks++;
         pendingTeleportDeadline = inputSequence + 60;
+        gracePeriods.grant(GraceReason.TELEPORT, PROTOCOL_GRACE_MILLIS);
     }
 
     public synchronized void acknowledgePendingTeleport() {
         if (pendingTeleportAcks > 0) pendingTeleportAcks--;
-        if (pendingTeleportAcks == 0) pendingTeleportDeadline = 0;
+        if (pendingTeleportAcks == 0) {
+            pendingTeleportDeadline = 0;
+        }
     }
 
     public synchronized boolean hasPendingTeleport() {
@@ -186,6 +205,7 @@ public final class PlayerData {
         if (hasMovementCorrection()) return false;
         movementCorrectionPending = true;
         movementCorrectionDeadline = inputSequence + 60;
+        gracePeriods.grant(GraceReason.SERVER_CORRECTION, PROTOCOL_GRACE_MILLIS);
         return true;
     }
 
@@ -193,6 +213,7 @@ public final class PlayerData {
         if (movementCorrectionPending && inputSequence > movementCorrectionDeadline) {
             movementCorrectionPending = false;
             movementCorrectionDeadline = 0;
+            gracePeriods.revoke(GraceReason.SERVER_CORRECTION);
         }
         return movementCorrectionPending;
     }
@@ -200,6 +221,7 @@ public final class PlayerData {
     public synchronized void finishMovementCorrection() {
         movementCorrectionPending = false;
         movementCorrectionDeadline = 0;
+        gracePeriods.revoke(GraceReason.SERVER_CORRECTION);
     }
 
     public synchronized boolean beginSimulationCorrectionEpisode() {
@@ -228,6 +250,7 @@ public final class PlayerData {
     }
 
     public synchronized void enqueueVelocity(Vec3 velocity) {
+        gracePeriods.grant(GraceReason.VELOCITY, VELOCITY_GRACE_MILLIS);
         velocityImpulses.addLast(new VelocityImpulse(++velocitySequence, inputSequence,
                 System.nanoTime(), velocity));
         while (velocityImpulses.size() > 8) velocityImpulses.removeFirst();
@@ -271,6 +294,7 @@ public final class PlayerData {
         spearLungeUntilInputSequence = 0;
         serverMotionCandidates.clear();
         serverMotionUntilInputSequence = 0;
+        gracePeriods.revoke(GraceReason.VELOCITY);
     }
 
     public synchronized void setWindChargeCandidates(List<Vec3> candidates) {
@@ -288,6 +312,39 @@ public final class PlayerData {
     public synchronized void clearWindChargeCandidates() {
         windChargeCandidates = List.of();
         windChargeUntilInputSequence = 0;
+    }
+
+    public synchronized void recordLeftClick(long now, boolean inCombat) {
+        if (lastLeftClickNanos > 0) {
+            long interval = now - lastLeftClickNanos;
+            if (interval > 0 && interval < 1_000_000_000L) {
+                macroIntervals[macroIntervalHead] = interval;
+                macroIntervalHead = (macroIntervalHead + 1) % macroIntervals.length;
+                if (macroIntervalCount < macroIntervals.length) macroIntervalCount++;
+            }
+        }
+        lastLeftClickNanos = now;
+        macroTotalClicks++;
+        if (inCombat) macroCombatClicks++;
+    }
+
+    public synchronized long[] macroIntervalSnapshot() {
+        if (macroIntervalCount == 0) return new long[0];
+        long[] snapshot = new long[macroIntervalCount];
+        int start = (macroIntervalHead - macroIntervalCount + macroIntervals.length) % macroIntervals.length;
+        for (int i = 0; i < macroIntervalCount; i++) {
+            snapshot[i] = macroIntervals[(start + i) % macroIntervals.length];
+        }
+        return snapshot;
+    }
+
+    public synchronized int macroIntervalCount() {
+        return macroIntervalCount;
+    }
+
+    public synchronized void resetMacroCorrelation() {
+        macroCombatClicks = 0;
+        macroTotalClicks = 0;
     }
 
     /** Drops the oldest tick of the rolling second and opens a fresh one. */
@@ -396,8 +453,10 @@ public final class PlayerData {
         serverMotionUntilInputSequence = 0;
     }
 
-    public void grantGrace(long millis) {
-        graceUntilNanos = System.nanoTime() + millis * 1_000_000L;
+    /** Resets transient check state and starts an exemption for the supplied transition. */
+    public void grantGrace(GraceReason reason, long millis) {
+        gracePeriods.clear();
+        gracePeriods.grant(reason, millis);
         timerSamples = 0;
         timerOverLimitSamples = 0;
         inputSequence = 0;
@@ -445,6 +504,19 @@ public final class PlayerData {
         inventoryMovePrepared = false;
         inventoryMoveRequestNanos = 0;
         inventoryMoveBuffer = 0;
+        chestClickTimestamps.clear();
+        chestStealerBuffer = 0;
+        lastTotemPopNanos = 0;
+        autoTotemBuffer = 0;
+        macroIntervalHead = 0;
+        macroIntervalCount = 0;
+        lastLeftClickNanos = 0;
+        macroCombatClicks = 0;
+        macroTotalClicks = 0;
+        macroBuffer = 0;
+        macroSuspectStreak = 0;
+        lastMacroAnalysisNanos = 0;
+        lastCombatNanos = 0;
         predictedVelocity = Vec3.ZERO;
         authoritativePosition = null;
         penetratedLastFrame = false;
@@ -491,8 +563,22 @@ public final class PlayerData {
     public record DirectSetback(Vector3f packetPosition, boolean onGround) {
     }
 
+    /** Returns whether a transition that globally exempts checks is still active. */
     public boolean inGrace() {
-        return System.nanoTime() < graceUntilNanos;
+        return gracePeriods.active(GraceReason.TELEPORT)
+                || gracePeriods.active(GraceReason.WORLD_CHANGE)
+                || gracePeriods.active(GraceReason.CHUNK_LOADING)
+                || gracePeriods.active(GraceReason.EFFECT_CHANGE);
+    }
+
+    /** Returns whether the supplied reason-specific exemption is still active. */
+    public boolean inGrace(GraceReason reason) {
+        return gracePeriods.active(reason);
+    }
+
+    /** Extends a reason-specific exemption without resetting tracked player state. */
+    public void grantGracePeriod(GraceReason reason, long millis) {
+        gracePeriods.grant(reason, millis);
     }
 
     public void resetVehicle() {

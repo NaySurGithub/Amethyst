@@ -1,5 +1,6 @@
 package nay.amethyst.check.inventory;
 
+import nay.amethyst.data.player.GraceReason;
 import nay.amethyst.data.player.PlayerData;
 import org.cloudburstmc.math.vector.Vector2f;
 import org.cloudburstmc.math.vector.Vector3f;
@@ -9,7 +10,7 @@ import org.cloudburstmc.protocol.bedrock.packet.PlayerAuthInputPacket;
 public final class InventoryMoveCheck {
     public void handleRequest(PlayerData data, ItemStackRequestPacket packet, long now) {
         if (packet.getRequests() == null || packet.getRequests().isEmpty()
-                || data.inGrace() || data.hasPendingVelocity()) return;
+                || data.inGrace() || data.inGrace(GraceReason.VELOCITY)) return;
         data.inventoryMovePrepared = data.lastDirectionalInput;
         data.inventoryMoveRequestNanos = now;
     }
@@ -21,7 +22,7 @@ public final class InventoryMoveCheck {
         boolean directional = magnitude > inputThreshold || drivenMovement > inputThreshold;
         boolean requestFresh = data.inventoryMovePrepared
                 && now - data.inventoryMoveRequestNanos <= requestWindowMillis * 1_000_000L;
-        boolean suspicious = requestFresh && directional && !data.hasPendingVelocity();
+        boolean suspicious = requestFresh && directional && !data.inGrace(GraceReason.VELOCITY);
 
         data.inventoryMovePrepared = false;
         data.lastDirectionalInput = directional;
