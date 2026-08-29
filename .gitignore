@@ -9,6 +9,9 @@
 !docs/
 !docs/**
 
+!.jarbage/
+!.jarbage/**
+
 !.github/
 !.github/workflows/
 !.github/workflows/**
