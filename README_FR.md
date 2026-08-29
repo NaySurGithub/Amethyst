@@ -107,7 +107,6 @@ le client l'a réellement vu.
 | `BedrockTool-A` | L'identité du client correspond à un outil connu. |
 | `ChestStealer-A` | Objets déplacés hors d'un conteneur plus vite qu'un humain ne peut cliquer. |
 | `AutoTotem-A` | Échange de totem dans la main secondaire quelques millisecondes après que le précédent ait pop. |
-| `Macro-A` | Heuristiques d'intervalles de clic détectant une entrée automatisée : consistance, PGCD, entropie, doublons, kurtosis, déficit d'outliers, corrélation au combat et pattern butterfly. |
 | `BadPacket-A…Q` | Champs de paquet malformés ou impossibles : valeurs, états et identifiants que le protocole ne peut pas produire. Un bloc posé sans le regarder est également refusé ici. |
 
 Les paquets invalides sont annulés. Des violations de mouvement répétées provoquent un setback vers la dernière

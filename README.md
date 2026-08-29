@@ -103,7 +103,6 @@ acknowledgement-gated, so the simulation only adopts a change once the client ha
 | `BedrockTool-A` | The client identity matches a known tool. |
 | `ChestStealer-A` | Items moved out of a container faster than a human can click. |
 | `AutoTotem-A` | Offhand totem swap within milliseconds of the previous one popping. |
-| `Macro-A` | Click-interval heuristics flag automated input: consistency, GCD, entropy, duplicates, kurtosis, outlier deficit, combat correlation and butterfly pattern. |
 | `BadPacket-A…Q` | Malformed or impossible packet fields: values, states and identifiers the protocol cannot produce. A block placed without looking at it is refused here too. |
 
 Invalid packets are cancelled. Repeated movement violations cause a setback to the last verified ground

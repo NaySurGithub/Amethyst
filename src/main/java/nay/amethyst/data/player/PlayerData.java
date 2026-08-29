@@ -82,15 +82,6 @@ public final class PlayerData {
     public int chestStealerBuffer;
     public long lastTotemPopNanos;
     public int autoTotemBuffer;
-    private final long[] macroIntervals = new long[100];
-    private int macroIntervalHead;
-    private int macroIntervalCount;
-    public long lastLeftClickNanos;
-    public int macroCombatClicks;
-    public int macroTotalClicks;
-    public double macroBuffer;
-    public int macroSuspectStreak;
-    public long lastMacroAnalysisNanos;
     public long lastCombatNanos;
     public long lastTick = -1;
     public long inputSequence;
@@ -314,39 +305,6 @@ public final class PlayerData {
         windChargeUntilInputSequence = 0;
     }
 
-    public synchronized void recordLeftClick(long now, boolean inCombat) {
-        if (lastLeftClickNanos > 0) {
-            long interval = now - lastLeftClickNanos;
-            if (interval > 0 && interval < 1_000_000_000L) {
-                macroIntervals[macroIntervalHead] = interval;
-                macroIntervalHead = (macroIntervalHead + 1) % macroIntervals.length;
-                if (macroIntervalCount < macroIntervals.length) macroIntervalCount++;
-            }
-        }
-        lastLeftClickNanos = now;
-        macroTotalClicks++;
-        if (inCombat) macroCombatClicks++;
-    }
-
-    public synchronized long[] macroIntervalSnapshot() {
-        if (macroIntervalCount == 0) return new long[0];
-        long[] snapshot = new long[macroIntervalCount];
-        int start = (macroIntervalHead - macroIntervalCount + macroIntervals.length) % macroIntervals.length;
-        for (int i = 0; i < macroIntervalCount; i++) {
-            snapshot[i] = macroIntervals[(start + i) % macroIntervals.length];
-        }
-        return snapshot;
-    }
-
-    public synchronized int macroIntervalCount() {
-        return macroIntervalCount;
-    }
-
-    public synchronized void resetMacroCorrelation() {
-        macroCombatClicks = 0;
-        macroTotalClicks = 0;
-    }
-
     /** Drops the oldest tick of the rolling second and opens a fresh one. */
     public synchronized void tickClicks() {
         clickSlot = (clickSlot + 1) % CLICK_WINDOW_TICKS;
@@ -508,14 +466,6 @@ public final class PlayerData {
         chestStealerBuffer = 0;
         lastTotemPopNanos = 0;
         autoTotemBuffer = 0;
-        macroIntervalHead = 0;
-        macroIntervalCount = 0;
-        lastLeftClickNanos = 0;
-        macroCombatClicks = 0;
-        macroTotalClicks = 0;
-        macroBuffer = 0;
-        macroSuspectStreak = 0;
-        lastMacroAnalysisNanos = 0;
         lastCombatNanos = 0;
         predictedVelocity = Vec3.ZERO;
         authoritativePosition = null;

@@ -2,7 +2,6 @@ package nay.amethyst.listener.network;
 
 import nay.amethyst.AmethystPlugin;
 import nay.amethyst.check.client.BedrockToolDetector;
-import nay.amethyst.check.combat.MacroCheck;
 import nay.amethyst.check.inventory.AutoTotemCheck;
 import nay.amethyst.check.inventory.ChestStealerCheck;
 import nay.amethyst.check.inventory.InventoryMoveCheck;
@@ -132,7 +131,6 @@ public final class PacketListener implements Listener {
     private final InventoryMoveCheck inventoryMoveCheck = new InventoryMoveCheck();
     private final ChestStealerCheck chestStealerCheck = new ChestStealerCheck();
     private final AutoTotemCheck autoTotemCheck = new AutoTotemCheck();
-    private final MacroCheck macroCheck = new MacroCheck();
     private final BadPacketCheck badPacketCheck = new BadPacketCheck();
     private final BlockPacketProcessor blockProcessor;
     private final CombatPacketProcessor combatProcessor;
@@ -156,7 +154,6 @@ public final class PacketListener implements Listener {
             if (data == null || !data.joined) continue;
             data.network.tick(now);
             inspectTimer(player, data);
-            inspectMacro(player, data, now);
             if (data.network.shouldProbe()) sendAcknowledgment(player, data, null);
         }
     }
@@ -377,9 +374,6 @@ public final class PacketListener implements Listener {
         } else if (event.getPacket() instanceof AnimatePacket packet) {
             if (packet.getAction() == AnimatePacket.Action.SWING) {
                 playerData.clickLeft();
-                long now = System.nanoTime();
-                boolean inCombat = now - playerData.lastCombatNanos < 3_000_000_000L;
-                playerData.recordLeftClick(now, inCombat);
             }
         } else if (event.getPacket() instanceof PlayerActionPacket packet) {
             inspectPlayerAction(event, player, playerData, packet);
@@ -434,43 +428,6 @@ public final class PacketListener implements Listener {
         if (result.failed()) {
             fail(event, player, data, CheckType.AUTO_TOTEM_A, 1,
                     "ms=" + result.elapsedMs(), true);
-        }
-    }
-
-    private void inspectMacro(Player player, PlayerData data, long now) {
-        if (data.macroIntervalCount() < 30) return;
-        if (now - data.lastMacroAnalysisNanos < 1_000_000_000L) return;
-        if (data.inGrace() || player.hasPermission("amethyst.bypass")) return;
-        data.lastMacroAnalysisNanos = now;
-        long[] intervals = data.macroIntervalSnapshot();
-        MacroCheck.Result result = macroCheck.analyse(intervals, intervals.length,
-                data.macroCombatClicks, data.macroTotalClicks);
-        if (result.flagged()) {
-            data.macroBuffer += result.score();
-            if (data.macroBuffer >= 12.0) {
-                double vl = data.violations.merge(CheckType.MACRO_A.id(), 1.0, Double::sum);
-                plugin.alert(player, CheckType.MACRO_A, vl,
-                        "score=" + NetworkCheckSupport.format(result.score()) + " " + result.breakdown());
-                data.macroBuffer = 6.0;
-            }
-            data.macroSuspectStreak = 0;
-        } else if (result.suspect()) {
-            data.macroSuspectStreak++;
-            if (data.macroSuspectStreak >= 3) {
-                data.macroBuffer += result.score();
-                if (data.macroBuffer >= 12.0) {
-                    double vl = data.violations.merge(CheckType.MACRO_A.id(), 1.0, Double::sum);
-                    plugin.alert(player, CheckType.MACRO_A, vl,
-                            "score=" + NetworkCheckSupport.format(result.score()) + " " + result.breakdown());
-                    data.macroBuffer = 6.0;
-                }
-            }
-        } else {
-            data.macroBuffer = Math.max(0, data.macroBuffer - 1.0);
-            data.macroSuspectStreak = Math.max(0, data.macroSuspectStreak - 1);
-        }
-        if (data.macroTotalClicks > 200) {
-            data.resetMacroCorrelation();
         }
     }
 
