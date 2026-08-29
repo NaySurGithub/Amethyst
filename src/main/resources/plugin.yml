@@ -1,6 +1,6 @@
 name: Amethyst
 main: nay.amethyst.AmethystPlugin
-version: "1.0.0"
+version: "1.1.0"
 api: ["3.0.0"]
 author: Nay
 description: Server-authoritative anti-cheat for PowerNukkitX.
