@@ -80,6 +80,9 @@ public final class PlayerData {
     public int inventoryMoveBuffer;
     public final java.util.ArrayDeque<Long> chestClickTimestamps = new java.util.ArrayDeque<>();
     public int chestStealerBuffer;
+    public long lastChestTakeNanos;
+    public int chestFastStreak;
+    public long containerOpenedNanos;
     public long lastTotemPopNanos;
     public int autoTotemBuffer;
     public long lastCombatNanos;
@@ -464,6 +467,9 @@ public final class PlayerData {
         inventoryMoveBuffer = 0;
         chestClickTimestamps.clear();
         chestStealerBuffer = 0;
+        lastChestTakeNanos = 0;
+        chestFastStreak = 0;
+        containerOpenedNanos = 0;
         lastTotemPopNanos = 0;
         autoTotemBuffer = 0;
         lastCombatNanos = 0;

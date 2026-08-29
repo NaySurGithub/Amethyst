@@ -29,6 +29,7 @@ import org.cloudburstmc.protocol.bedrock.data.actor.ActorEvent;
 import org.cloudburstmc.protocol.bedrock.data.PlayerActionType;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerActionPacket;
 import org.cloudburstmc.protocol.bedrock.packet.ActorEventPacket;
+import org.cloudburstmc.protocol.bedrock.packet.ContainerOpenPacket;
 import org.cloudburstmc.protocol.bedrock.packet.AnimatePacket;
 import org.cloudburstmc.protocol.bedrock.data.payload.inventory.transaction.ItemUseTriggerType;
 import org.cloudburstmc.protocol.bedrock.packet.InteractPacket;
@@ -417,8 +418,7 @@ public final class PacketListener implements Listener {
                                      ItemStackRequestPacket packet, long now) {
         ChestStealerCheck.Result result = chestStealerCheck.inspect(data, packet, now, 8);
         if (result.failed()) {
-            fail(event, player, data, CheckType.CHEST_STEALER_A, 1,
-                    "cps=" + result.cps(), true);
+            fail(event, player, data, CheckType.CHEST_STEALER_A, 1, result.detail(), true);
         }
     }
 
@@ -442,6 +442,12 @@ public final class PacketListener implements Listener {
                 && actorEvent.getType() == ActorEvent.TALISMAN_ACTIVATE
                 && actorEvent.getTargetRuntimeID() == player.getId()) {
             data.lastTotemPopNanos = System.nanoTime();
+            return;
+        }
+        if (event.getPacket() instanceof ContainerOpenPacket) {
+            data.containerOpenedNanos = System.nanoTime();
+            data.chestFastStreak = 0;
+            data.lastChestTakeNanos = 0;
             return;
         }
         if (event.getPacket() instanceof LevelChunkPacket
