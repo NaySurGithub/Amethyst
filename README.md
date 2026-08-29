@@ -101,8 +101,9 @@ acknowledgement-gated, so the simulation only adopts a change once the client ha
 | `FastUse-A` | A consumable finished in fewer ticks than any food or potion takes. |
 | `InvMove-A` | Directed movement during an inventory interaction. |
 | `BedrockTool-A` | The client identity matches a known tool. |
-| `ChestStealer-A` | Items moved out of a container faster than a human can click. |
+| `ChestStealer-A` | Items taken out of a container faster than a human can click, in a machine-steady cadence, or before the container could be read. |
 | `AutoTotem-A` | Offhand totem swap within milliseconds of the previous one popping. |
+| `Backtrack-A` | Actor movement sent for an entity the player is not riding, which is how withheld entity positions are replayed. |
 | `BadPacket-A…Q` | Malformed or impossible packet fields: values, states and identifiers the protocol cannot produce. A block placed without looking at it is refused here too. |
 
 Invalid packets are cancelled. Repeated movement violations cause a setback to the last verified ground

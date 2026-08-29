@@ -105,8 +105,9 @@ le client l'a réellement vu.
 | `FastUse-A` | Un consommable terminé en moins de ticks qu'aucun aliment ou potion n'en demande. |
 | `InvMove-A` | Déplacement dirigé pendant une interaction d'inventaire. |
 | `BedrockTool-A` | L'identité du client correspond à un outil connu. |
-| `ChestStealer-A` | Objets déplacés hors d'un conteneur plus vite qu'un humain ne peut cliquer. |
+| `ChestStealer-A` | Objets retirés d'un conteneur plus vite qu'un humain ne peut cliquer, à une cadence de machine, ou avant d'avoir pu lire le conteneur. |
 | `AutoTotem-A` | Échange de totem dans la main secondaire quelques millisecondes après que le précédent ait pop. |
+| `Backtrack-A` | Mouvement d'entité envoyé pour une entité que le joueur ne chevauche pas, signature du rejeu des positions retenues. |
 | `BadPacket-A…Q` | Champs de paquet malformés ou impossibles : valeurs, états et identifiants que le protocole ne peut pas produire. Un bloc posé sans le regarder est également refusé ici. |
 
 Les paquets invalides sont annulés. Des violations de mouvement répétées provoquent un setback vers la dernière
