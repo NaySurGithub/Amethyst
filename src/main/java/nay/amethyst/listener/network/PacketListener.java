@@ -2,6 +2,7 @@ package nay.amethyst.listener.network;
 
 import nay.amethyst.AmethystPlugin;
 import nay.amethyst.check.client.BedrockToolDetector;
+import nay.amethyst.check.combat.BacktrackCheck;
 import nay.amethyst.check.inventory.AutoTotemCheck;
 import nay.amethyst.check.inventory.ChestStealerCheck;
 import nay.amethyst.check.inventory.InventoryMoveCheck;
@@ -132,6 +133,7 @@ public final class PacketListener implements Listener {
     private final InventoryMoveCheck inventoryMoveCheck = new InventoryMoveCheck();
     private final ChestStealerCheck chestStealerCheck = new ChestStealerCheck();
     private final AutoTotemCheck autoTotemCheck = new AutoTotemCheck();
+    private final BacktrackCheck backtrackCheck = new BacktrackCheck();
     private final BadPacketCheck badPacketCheck = new BadPacketCheck();
     private final BlockPacketProcessor blockProcessor;
     private final CombatPacketProcessor combatProcessor;
@@ -154,6 +156,9 @@ public final class PacketListener implements Listener {
             PlayerData data = players.get(player.getUniqueId());
             if (data == null || !data.joined) continue;
             data.network.tick(now);
+            if (player.getRiding() != null) {
+                data.lastRidingNanos = now;
+            }
             inspectTimer(player, data);
             if (data.network.shouldProbe()) sendAcknowledgment(player, data, null);
         }
@@ -372,6 +377,8 @@ public final class PacketListener implements Listener {
             inventoryMoveCheck.handleRequest(playerData, packet, now);
             inspectChestStealer(event, player, playerData, packet, now);
             inspectAutoTotem(event, player, playerData, packet, now);
+        } else if (event.getPacket() instanceof MoveActorAbsolutePacket packet) {
+            inspectBacktrack(event, player, playerData, packet);
         } else if (event.getPacket() instanceof AnimatePacket packet) {
             if (packet.getAction() == AnimatePacket.Action.SWING) {
                 playerData.clickLeft();
@@ -419,6 +426,14 @@ public final class PacketListener implements Listener {
         ChestStealerCheck.Result result = chestStealerCheck.inspect(data, packet, now, 8);
         if (result.failed()) {
             fail(event, player, data, CheckType.CHEST_STEALER_A, 1, result.detail(), true);
+        }
+    }
+
+    private void inspectBacktrack(PacketReceiveEvent event, Player player, PlayerData data,
+                                  MoveActorAbsolutePacket packet) {
+        BacktrackCheck.Result result = backtrackCheck.inspect(player, data, packet, System.nanoTime());
+        if (result.failed()) {
+            fail(event, player, data, CheckType.BACKTRACK_A, 2, result.detail(), true);
         }
     }
 

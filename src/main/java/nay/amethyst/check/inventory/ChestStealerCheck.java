@@ -23,27 +23,21 @@ public final class ChestStealerCheck {
             return Result.CLEAN;
         }
 
-        int containerActions = 0;
         int takeActions = 0;
         for (ItemStackRequest request : requests) {
             if (request.getActions() == null) continue;
             for (ItemStackRequestAction action : request.getActions()) {
                 if (action == null) continue;
-                var type = action.getType();
-                if (type == ItemStackRequestActionType.TAKE
-                        || type == ItemStackRequestActionType.PLACE
-                        || type == ItemStackRequestActionType.SWAP) {
-                    containerActions++;
-                }
-                if (type == ItemStackRequestActionType.TAKE) {
+                if (action.getType() == ItemStackRequestActionType.TAKE) {
                     takeActions++;
                 }
             }
         }
 
-        if (containerActions == 0) {
+        if (takeActions == 0) {
             return Result.CLEAN;
         }
+        int containerActions = takeActions;
 
         Result openResult = inspectOpenReaction(data, now, takeActions);
         Result intervalResult = inspectInterval(data, now, containerActions, takeActions);

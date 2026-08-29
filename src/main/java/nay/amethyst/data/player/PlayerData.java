@@ -83,6 +83,7 @@ public final class PlayerData {
     public long lastChestTakeNanos;
     public int chestFastStreak;
     public long containerOpenedNanos;
+    public long lastRidingNanos;
     public long lastTotemPopNanos;
     public int autoTotemBuffer;
     public long lastCombatNanos;
@@ -470,6 +471,7 @@ public final class PlayerData {
         lastChestTakeNanos = 0;
         chestFastStreak = 0;
         containerOpenedNanos = 0;
+        lastRidingNanos = 0;
         lastTotemPopNanos = 0;
         autoTotemBuffer = 0;
         lastCombatNanos = 0;
