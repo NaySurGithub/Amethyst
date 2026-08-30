@@ -873,10 +873,6 @@ public final class PacketListener implements Listener {
             fail(event, player, data, CheckType.BAD_PACKET_K, 2, "not asleep", true);
             return;
         }
-        if (type == PlayerActionType.RESPAWN && player.isAlive() && player.getHealth() > 0) {
-            fail(event, player, data, CheckType.BAD_PACKET_L, 2, "still alive", true);
-            return;
-        }
         if (type == PlayerActionType.START_SPIN_ATTACK) {
             var frame = data.history.latest();
             float yaw = frame == null ? (float) player.yaw : frame.yaw();
@@ -963,7 +959,7 @@ public final class PacketListener implements Listener {
                 || data.clientEntities.isProjectile(target)) {
             return;
         }
-        fail(event, player, data, CheckType.BAD_PACKET_M, 2, "target=" + target, true);
+        fail(event, player, data, CheckType.BAD_PACKET_L, 2, "target=" + target, true);
     }
 
     private void inspectBadSlot(PacketReceiveEvent event, Player player, PlayerData data,

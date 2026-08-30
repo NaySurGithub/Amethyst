@@ -48,7 +48,7 @@ public final class BadPacketCheck {
         if (packet instanceof RequestChunkRadiusPacket radius) {
             int requested = radius.getChunkRadius();
             if (requested < MINIMUM_CHUNK_RADIUS || requested > MAXIMUM_CHUNK_RADIUS) {
-                return result(CheckType.BAD_PACKET_Q, "radius=" + requested);
+                return result(CheckType.BAD_PACKET_P, "radius=" + requested);
             }
         }
         return null;
@@ -76,7 +76,7 @@ public final class BadPacketCheck {
             return null;
         }
         data.vehicleClaimBuffer = 0;
-        return result(CheckType.BAD_PACKET_O, riding == null
+        return result(CheckType.BAD_PACKET_N, riding == null
                 ? "claimed vehicle " + predicted + " while riding nothing"
                 : "claimed vehicle " + predicted + " while riding " + riding.getId());
     }
@@ -91,7 +91,7 @@ public final class BadPacketCheck {
         if (position.getY() < minimumY || position.getY() > maximumY
                 || Math.abs(position.getX()) > HORIZONTAL_LIMIT
                 || Math.abs(position.getZ()) > HORIZONTAL_LIMIT) {
-            return result(CheckType.BAD_PACKET_P, "position=" + position);
+            return result(CheckType.BAD_PACKET_O, "position=" + position);
         }
         return null;
     }
@@ -168,7 +168,7 @@ public final class BadPacketCheck {
         if (scaffold != null) return result(CheckType.SCAFFOLD_A, scaffold.detail());
         if (transaction.getActionType() == ItemUseActionType.PLACE) {
             WeirdPlaceCheck.Result weird = WeirdPlaceCheck.inspect(player, data, transaction);
-            if (weird != null) return result(CheckType.BAD_PACKET_N, weird.detail());
+            if (weird != null) return result(CheckType.BAD_PACKET_M, weird.detail());
         }
         if (!hotbarSlot(transaction.getSlot())) {
             return result(CheckType.BAD_PACKET_I, "hotbar-slot=" + transaction.getSlot());

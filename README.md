@@ -91,6 +91,7 @@ acknowledgement-gated, so the simulation only adopts a change once the client ha
 | `Vehicle-A` | Boat, minecart or mount movement that did not match its own prediction. The vehicle is sent back, not its rider. |
 | `NoFall-A` | Fall damage that did not match the simulated fall. |
 | `GroundSpoof-A` | The client claimed a vertical collision with nothing under it. |
+| `Phase-A` | Ground covered while inside full solid blocks. Blocks with their own collision shape are ignored, and arriving inside one is not enough on its own. |
 | `Sprint-A…C` | A sprint state the client cannot legitimately hold. |
 | `Elytra-A…B` | A glide started in conditions the client refuses. |
 | `KillAura-A` | Invalid attack target or attack sequence. |
@@ -109,7 +110,7 @@ acknowledgement-gated, so the simulation only adopts a change once the client ha
 | `ChestStealer-A` | Items taken out of a container faster than a human can click, in a machine-steady cadence, or before the container could be read. |
 | `AutoTotem-A` | Offhand totem swap within milliseconds of the previous one popping. |
 | `Backtrack-A` | Actor movement sent for an entity the player is not riding, which is how withheld entity positions are replayed. |
-| `BadPacket-A…Q` | Malformed or impossible packet fields: values, states and identifiers the protocol cannot produce. A block placed without looking at it is refused here too. |
+| `BadPacket-A…P` | Malformed or impossible packet fields: values, states and identifiers the protocol cannot produce. A block placed without looking at it is refused here too. |
 
 Invalid packets are cancelled. Repeated movement violations cause a setback to the last verified ground
 position, falling back to the last server-safe location before a ground anchor exists. A correction remains

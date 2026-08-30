@@ -89,6 +89,7 @@ le client l'a réellement vu.
 | `Timer` | Plus de frames client que de ticks écoulés, signe d'un client qui fait tourner sa simulation trop vite. |
 | `Vehicle-A` | Un mouvement de bateau, wagonnet ou monture qui n'a pas suivi sa propre prédiction. C'est le véhicule qui est renvoyé, pas son passager. |
 | `NoFall-A` | Des dégâts de chute qui ne correspondent pas à la chute simulée. |
+| `Phase-A` | Distance parcourue à l'intérieur de blocs pleins. Les blocs ayant leur propre forme de collision sont ignorés, et se retrouver dans un bloc ne suffit pas à déclencher. |
 | `GroundSpoof-A` | Le client annonce une collision verticale avec rien sous lui. |
 | `Sprint-A…C` | Un état de sprint que le client ne peut pas légitimement tenir. |
 | `Elytra-A…B` | Un vol plané démarré dans des conditions que le client refuse. |
@@ -108,7 +109,7 @@ le client l'a réellement vu.
 | `ChestStealer-A` | Objets retirés d'un conteneur plus vite qu'un humain ne peut cliquer, à une cadence de machine, ou avant d'avoir pu lire le conteneur. |
 | `AutoTotem-A` | Échange de totem dans la main secondaire quelques millisecondes après que le précédent ait pop. |
 | `Backtrack-A` | Mouvement d'entité envoyé pour une entité que le joueur ne chevauche pas, signature du rejeu des positions retenues. |
-| `BadPacket-A…Q` | Champs de paquet malformés ou impossibles : valeurs, états et identifiants que le protocole ne peut pas produire. Un bloc posé sans le regarder est également refusé ici. |
+| `BadPacket-A…P` | Champs de paquet malformés ou impossibles : valeurs, états et identifiants que le protocole ne peut pas produire. Un bloc posé sans le regarder est également refusé ici. |
 
 Les paquets invalides sont annulés. Des violations de mouvement répétées provoquent un setback vers la dernière
 position vérifiée **au sol** ; un joueur qui n'en a pas encore atteint une reçoit seulement des alertes. `Timer`
