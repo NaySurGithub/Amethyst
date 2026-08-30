@@ -31,8 +31,19 @@ public final class AmethystPlugin extends PluginBase {
     private volatile AmethystSettings settings;
     private final AlertFormatter alertFormatter = new AlertFormatter();
 
+    private static AmethystPlugin instance;
+
+    public static AmethystPlugin getInstance() {
+        return instance;
+    }
+
+    public PlayerData getPlayerData(Player player) {
+        return player == null ? null : players.get(player.getUniqueId());
+    }
+
     @Override
     public void onEnable() {
+        instance = this;
         saveDefaultConfig();
         loadSettings();
         movementSessions = new MovementSessionRegistry(this);
@@ -51,6 +62,7 @@ public final class AmethystPlugin extends PluginBase {
             movementSessions.shutdown(getServer().getOnlinePlayers().values());
         }
         players.clear();
+        instance = null;
     }
 
     void loadSettings() {
