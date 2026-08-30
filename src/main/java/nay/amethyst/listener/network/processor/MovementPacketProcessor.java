@@ -54,8 +54,8 @@ public final class MovementPacketProcessor {
     private static final double VELOCITY_MAXIMUM_PUSH = 1.5;
     private static final long IMPULSE_TOLERANCE_TICKS = 30;
     private static final double DEFAULT_MOVEMENT_SPEED = 0.1;
-    private static final int PHASE_MINIMUM_FRAMES = 4;
-    private static final double PHASE_MINIMUM_TRAVEL = 1.0;
+    private static final int PHASE_MINIMUM_FRAMES = 8;
+    private static final double PHASE_MINIMUM_TRAVEL = 1.5;
     private static final double COBWEB_MULTIPLIER = 0.25;
     private static final double COBWEB_SPEED_ALLOWANCE = 3.0;
     private static final double COBWEB_JUMP_ALLOWANCE = 0.2;
@@ -374,6 +374,7 @@ public final class MovementPacketProcessor {
         var frame = data.history.latest();
         if (frame == null || player.isSpectator() || data.inGrace() || data.hasPendingTeleport()
                 || data.hasMovementCorrection() || data.stuckInCollider
+                || MovementCheckSupport.nearMovingBlock(frame, accepted)
                 || !MovementCheckSupport.insideFullCube(frame, accepted)) {
             data.phaseFrames = 0;
             data.phaseEntry = null;

@@ -4,6 +4,7 @@ import nay.amethyst.data.player.PlayerData;
 import nay.amethyst.check.type.CheckType;
 import nay.amethyst.history.model.Aabb;
 import nay.amethyst.history.model.BlockFrame;
+import nay.amethyst.history.model.BlockPos;
 import nay.amethyst.history.model.WorldFrame;
 import nay.amethyst.prediction.common.Vec3;
 import org.cloudburstmc.math.vector.Vector3f;
@@ -20,6 +21,7 @@ import java.util.Set;
 public final class MovementCheckSupport {
     private static final double HITBOX_INSET = 0.03;
     private static final double CUBE_EPSILON = 1.0E-6;
+    private static final double MOVING_BLOCK_RANGE = 1.0;
     private static final Set<String> SHAPE_EXEMPT_BLOCKS = Set.of(BlockID.MOVING_BLOCK,
             BlockID.PISTON, BlockID.STICKY_PISTON, BlockID.PISTON_ARM_COLLISION,
             BlockID.STICKY_PISTON_ARM_COLLISION, BlockID.BAMBOO, BlockID.SCAFFOLDING);
@@ -78,6 +80,30 @@ public final class MovementCheckSupport {
                         return true;
                     }
                 }
+            }
+        }
+        return false;
+    }
+
+    /** Whether a piston is moving a block within a block of the player. */
+    public static boolean nearMovingBlock(WorldFrame frame, Vector3f position) {
+        if (frame.index().moving().isEmpty()) {
+            return false;
+        }
+
+        double half = frame.physics().width() / 2.0 + MOVING_BLOCK_RANGE;
+        double feet = position.getY() - frame.physics().baseOffset();
+        double minimumX = position.getX() - half;
+        double maximumX = position.getX() + half;
+        double minimumY = feet - MOVING_BLOCK_RANGE;
+        double maximumY = feet + frame.physics().height() + MOVING_BLOCK_RANGE;
+        double minimumZ = position.getZ() - half;
+        double maximumZ = position.getZ() + half;
+        for (BlockPos moving : frame.index().moving()) {
+            if (moving.x() + 1.0 > minimumX && moving.x() < maximumX
+                    && moving.y() + 1.0 > minimumY && moving.y() < maximumY
+                    && moving.z() + 1.0 > minimumZ && moving.z() < maximumZ) {
+                return true;
             }
         }
         return false;
