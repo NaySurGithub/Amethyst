@@ -371,9 +371,10 @@ public final class MovementPacketProcessor {
     /** Flags a player travelling through full solid blocks. */
     private void inspectPhase(PacketReceiveEvent event, Player player, PlayerData data,
                               Vector3f accepted) {
-        if (player.isSpectator() || data.inGrace() || data.hasPendingTeleport()
+        var frame = data.history.latest();
+        if (frame == null || player.isSpectator() || data.inGrace() || data.hasPendingTeleport()
                 || data.hasMovementCorrection() || data.stuckInCollider
-                || !MovementCheckSupport.insideFullCube(player, accepted)) {
+                || !MovementCheckSupport.insideFullCube(frame, accepted)) {
             data.phaseFrames = 0;
             data.phaseEntry = null;
             return;

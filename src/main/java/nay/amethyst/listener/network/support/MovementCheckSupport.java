@@ -2,6 +2,9 @@ package nay.amethyst.listener.network.support;
 
 import nay.amethyst.data.player.PlayerData;
 import nay.amethyst.check.type.CheckType;
+import nay.amethyst.history.model.Aabb;
+import nay.amethyst.history.model.BlockFrame;
+import nay.amethyst.history.model.WorldFrame;
 import nay.amethyst.prediction.common.Vec3;
 import org.cloudburstmc.math.vector.Vector3f;
 import org.powernukkitx.Player;
@@ -47,13 +50,13 @@ public final class MovementCheckSupport {
      * custom collision shape are ignored, so only a wall the client cannot legally stand inside is
      * reported.
      */
-    public static boolean insideFullCube(Player player, Vector3f position) {
-        double half = player.getWidth() / 2.0 - HITBOX_INSET;
-        double feet = position.getY() - player.getBaseOffset();
+    public static boolean insideFullCube(WorldFrame frame, Vector3f position) {
+        double half = frame.physics().width() / 2.0 - HITBOX_INSET;
+        double feet = position.getY() - frame.physics().baseOffset();
         double minimumX = position.getX() - half;
         double maximumX = position.getX() + half;
         double minimumY = feet + HITBOX_INSET;
-        double maximumY = feet + player.getHeight() - HITBOX_INSET;
+        double maximumY = feet + frame.physics().height() - HITBOX_INSET;
         double minimumZ = position.getZ() - half;
         double maximumZ = position.getZ() + half;
         if (maximumY <= minimumY) {
@@ -63,14 +66,15 @@ public final class MovementCheckSupport {
         for (int x = floor(minimumX); x <= floor(maximumX); x++) {
             for (int y = floor(minimumY); y <= floor(maximumY); y++) {
                 for (int z = floor(minimumZ); z <= floor(maximumZ); z++) {
-                    Block block = player.getLevel().getBlock(x, y, z, 0);
-                    if (!isFullCube(block)) {
+                    if (!frame.coversBlock(x, y, z)) {
                         continue;
                     }
-                    AxisAlignedBB box = block.getCollisionBoundingBox();
-                    if (box.getMaxX() > minimumX && box.getMinX() < maximumX
-                            && box.getMaxY() > minimumY && box.getMinY() < maximumY
-                            && box.getMaxZ() > minimumZ && box.getMinZ() < maximumZ) {
+                    if (!isFullCube(frame.blockAt(x, y, z), x, y, z)) {
+                        continue;
+                    }
+                    if (x + 1.0 > minimumX && x < maximumX
+                            && y + 1.0 > minimumY && y < maximumY
+                            && z + 1.0 > minimumZ && z < maximumZ) {
                         return true;
                     }
                 }
@@ -79,23 +83,21 @@ public final class MovementCheckSupport {
         return false;
     }
 
-    private static boolean isFullCube(Block block) {
-        if (block == null || block.isAir() || !block.isSolid() || block.canPassThrough()) {
+    private static boolean isFullCube(BlockFrame block, int x, int y, int z) {
+        if (block == null || block.water() || block.lava() || block.climbable()
+                || block.stair() != null || block.collisions().size() != 1) {
             return false;
         }
-        if (SHAPE_EXEMPT_BLOCKS.contains(block.getId())) {
+        if (SHAPE_EXEMPT_BLOCKS.contains(block.id())) {
             return false;
         }
-        AxisAlignedBB box = block.getCollisionBoundingBox();
-        if (box == null) {
-            return false;
-        }
-        return Math.abs(box.getMinX() - block.getFloorX()) <= CUBE_EPSILON
-                && Math.abs(box.getMinY() - block.getFloorY()) <= CUBE_EPSILON
-                && Math.abs(box.getMinZ() - block.getFloorZ()) <= CUBE_EPSILON
-                && Math.abs(box.getMaxX() - (block.getFloorX() + 1.0)) <= CUBE_EPSILON
-                && Math.abs(box.getMaxY() - (block.getFloorY() + 1.0)) <= CUBE_EPSILON
-                && Math.abs(box.getMaxZ() - (block.getFloorZ() + 1.0)) <= CUBE_EPSILON;
+        Aabb box = block.collisions().get(0);
+        return Math.abs(box.minX() - x) <= CUBE_EPSILON
+                && Math.abs(box.minY() - y) <= CUBE_EPSILON
+                && Math.abs(box.minZ() - z) <= CUBE_EPSILON
+                && Math.abs(box.maxX() - (x + 1.0)) <= CUBE_EPSILON
+                && Math.abs(box.maxY() - (y + 1.0)) <= CUBE_EPSILON
+                && Math.abs(box.maxZ() - (z + 1.0)) <= CUBE_EPSILON;
     }
 
     /** Whether anything under the player has a collision box smaller than a full cube. */
