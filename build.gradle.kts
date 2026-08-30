@@ -7,10 +7,20 @@ version = "1.1.0"
 
 repositories {
     mavenCentral()
+    maven {
+        name = "powerNukkitXReleases"
+        url = uri("https://repo.powernukkitx.org/releases")
+    }
+    maven("https://repo.opencollab.dev/maven-releases/")
+    maven("https://repo.opencollab.dev/maven-snapshots/") {
+        mavenContent {
+            snapshotsOnly()
+        }
+    }
 }
 
 dependencies {
-    compileOnly(files("../powernukkitx.jar"))
+    compileOnly("org.powernukkitx:server:stable-SNAPSHOT")
 }
 
 java {
