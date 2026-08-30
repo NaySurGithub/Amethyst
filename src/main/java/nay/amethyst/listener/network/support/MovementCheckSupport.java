@@ -11,16 +11,13 @@ import org.powernukkitx.block.BlockID;
 import org.powernukkitx.math.AxisAlignedBB;
 import org.powernukkitx.math.SimpleAxisAlignedBB;
 import org.powernukkitx.level.Location;
-import org.powernukkitx.item.Item;
-import org.powernukkitx.item.ItemID;
-import org.powernukkitx.item.enchantment.Enchantment;
 
 public final class MovementCheckSupport {
     private MovementCheckSupport() {
     }
 
     public static boolean isMovementCheck(CheckType check) {
-        return check == CheckType.SIMULATION || check == CheckType.TIMER
+        return check == CheckType.SIMULATION || check == CheckType.FLY_A || check == CheckType.TIMER
                 || check == CheckType.VEHICLE_A
                 || check == CheckType.NO_FALL_A || check == CheckType.VELOCITY_A;
     }
@@ -92,16 +89,6 @@ public final class MovementCheckSupport {
         AxisAlignedBB box = new SimpleAxisAlignedBB(position.getX() - half, feet - 0.35, position.getZ() - half,
                 position.getX() + half, feet + 0.02, position.getZ() + half);
         return player.getLevel().getCollisionBlocks(box, true).length > 0;
-    }
-
-    public static boolean riptideAvailable(Player player) {
-        Item item = player.getInventory().getItemInMainHand();
-        if (!ItemID.TRIDENT.equals(item.getId())
-                || item.getEnchantmentLevel(Enchantment.ID_TRIDENT_RIPTIDE) < 1) {
-            return false;
-        }
-        return player.isTouchingWater()
-                || player.getLevel().isRaining() && player.getLevel().canBlockSeeSky(player);
     }
 
     public static Location clientLocation(Player player, Vector3f position, Vector3f rotation) {

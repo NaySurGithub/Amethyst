@@ -24,10 +24,12 @@ import nay.amethyst.network.session.MovementSessionRegistry;
 import nay.amethyst.packet.movement.MovementPreValidationResult;
 import nay.amethyst.simulation.movement.FloatVector;
 import nay.amethyst.simulation.movement.MovementConstants;
+import nay.amethyst.simulation.movement.RiptidePhysics;
 import org.cloudburstmc.math.vector.Vector3f;
 import org.cloudburstmc.math.vector.Vector3i;
 import org.cloudburstmc.protocol.bedrock.data.actor.ActorEvent;
 import org.cloudburstmc.protocol.bedrock.data.PlayerActionType;
+import org.cloudburstmc.protocol.bedrock.data.PlayerAuthInputData;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerActionPacket;
 import org.cloudburstmc.protocol.bedrock.packet.ActorEventPacket;
 import org.cloudburstmc.protocol.bedrock.packet.ContainerOpenPacket;
@@ -126,6 +128,7 @@ public final class PacketListener implements Listener {
     private static final double TIMER_MAXIMUM_RATIO = 1.7;
     private static final double TIMER_PING_ALLOWANCE = 0.5;
     private static final int FAST_USE_MINIMUM_TICKS = 5;
+    private static final int RIPTIDE_CHARGE_TICKS = 10;
 
     private final AmethystPlugin plugin;
     private final Map<UUID, PlayerData> players;
@@ -366,6 +369,8 @@ public final class PacketListener implements Listener {
             return;
         }
         if (event.getPacket() instanceof PlayerAuthInputPacket packet) {
+            inspectRiptideInput(event, player, playerData, packet);
+            if (event.isCancelled()) return;
             if (packet.getClientTick() > playerData.lastTick) {
                 playerData.clientEntities.tick();
                 playerData.tickClicks();
@@ -870,7 +875,75 @@ public final class PacketListener implements Listener {
         }
         if (type == PlayerActionType.RESPAWN && player.isAlive() && player.getHealth() > 0) {
             fail(event, player, data, CheckType.BAD_PACKET_L, 2, "still alive", true);
+            return;
         }
+        if (type == PlayerActionType.START_SPIN_ATTACK) {
+            var frame = data.history.latest();
+            float yaw = frame == null ? (float) player.yaw : frame.yaw();
+            float pitch = frame == null ? (float) player.pitch : frame.pitch();
+            prepareRiptide(player, data, yaw, pitch, data.lastTick);
+        } else if (type == PlayerActionType.STOP_SPIN_ATTACK) {
+            data.stopRiptide();
+        }
+    }
+
+    private void inspectRiptideInput(PacketReceiveEvent event, Player player, PlayerData data,
+                                     PlayerAuthInputPacket packet) {
+        if (packet.getInputData().contains(PlayerAuthInputData.START_USING_ITEM)) {
+            Item item = riptideTrident(player);
+            if (item != null) {
+                data.riptideUseStartTick = packet.getClientTick();
+            }
+        }
+        if (packet.getInputData().contains(PlayerAuthInputData.STOP_SPIN_ATTACK)) {
+            data.stopRiptide();
+        }
+        if (packet.getInputData().contains(PlayerAuthInputData.START_SPIN_ATTACK)) {
+            Vector3f rotation = packet.getPlayerRotation();
+            prepareRiptide(player, data, rotation.getY(), rotation.getX(),
+                    packet.getClientTick());
+        }
+    }
+
+    private void prepareRiptide(Player player, PlayerData data, float yaw, float pitch,
+                                long actionTick) {
+        Item trident = riptideTrident(player);
+        int level = trident == null ? 0
+                : trident.getEnchantmentLevel(Enchantment.ID_TRIDENT_RIPTIDE);
+        boolean validItem = trident != null && level >= 1;
+        long chargedTicks = data.riptideUseStartTick == Long.MIN_VALUE
+                ? Long.MIN_VALUE : actionTick - data.riptideUseStartTick;
+        boolean charged = chargedTicks >= RIPTIDE_CHARGE_TICKS;
+        // PlayerAction and PlayerAuthInput may report the same start. Ignore only an
+        // uncharged duplicate; a fully charged start can legitimately replace a spin
+        // which is ending on this very input tick.
+        if (data.riptideActive() && !charged) {
+            return;
+        }
+        if (!validItem || !charged || player.getRiding() != null) {
+            data.clearRiptideCandidates();
+            return;
+        }
+
+        data.riptideUseStartTick = Long.MIN_VALUE;
+        Vec3 impulse = RiptidePhysics.impulse(yaw, pitch, level);
+        Vec3 current = data.predictedVelocity == null ? Vec3.ZERO : data.predictedVelocity;
+        Vec3 combined = data.motion.immobile() ? current : current.add(impulse);
+        data.setRiptideCandidates(List.of(combined), player.isOnGround());
+    }
+
+    private static Item riptideTrident(Player player) {
+        Item mainHand = player.getInventory().getItemInMainHand();
+        if (mainHand != null && !mainHand.isNull() && ItemID.TRIDENT.equals(mainHand.getId())
+                && mainHand.getEnchantmentLevel(Enchantment.ID_TRIDENT_RIPTIDE) >= 1) {
+            return mainHand;
+        }
+        Item offhand = player.getOffhandInventory().getItem(0);
+        if (offhand != null && !offhand.isNull() && ItemID.TRIDENT.equals(offhand.getId())
+                && offhand.getEnchantmentLevel(Enchantment.ID_TRIDENT_RIPTIDE) >= 1) {
+            return offhand;
+        }
+        return null;
     }
 
     private void inspectInteract(PacketReceiveEvent event, Player player, PlayerData data,
@@ -930,6 +1003,12 @@ public final class PacketListener implements Listener {
             return;
         }
         Item item = player.getInventory().getItemInMainHand();
+        ItemData used = transaction.getItem();
+        if (used != null && used.getDefinition() != null
+                && ItemID.TRIDENT.equals(used.getDefinition().getIdentifier())
+                && riptideTrident(player) != null) {
+            data.riptideUseStartTick = data.lastTick;
+        }
         if (item != null && !item.isNull() && item.isConsumable()) {
             data.itemUseStartTick = data.lastTick;
             if (item.getUseDuration() > 0.0f) {

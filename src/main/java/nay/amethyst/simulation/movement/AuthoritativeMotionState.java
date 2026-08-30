@@ -42,6 +42,7 @@ public final class AuthoritativeMotionState {
     private int supportingBlockX;
     private int supportingBlockY;
     private int supportingBlockZ;
+    private int riptideTicks;
 
     private FloatVector teleportPosition = FloatVector.ZERO;
     private FloatVector pendingTeleportPosition = FloatVector.ZERO;
@@ -76,6 +77,8 @@ public final class AuthoritativeMotionState {
     private boolean justDisabledFlight;
     private boolean correctionCooldown;
     private boolean initialized;
+    private boolean riptideActive;
+    private boolean riptideGroundStepPending;
 
     private int jumpBoostLevel;
     private int jumpBoostTicks;
@@ -256,6 +259,40 @@ public final class AuthoritativeMotionState {
         supportedBranchRecoveryCooldown = 0;
         slideOffsetX = 0.0f;
         slideOffsetY = 0.0f;
+        stopRiptide();
+    }
+
+    public void startRiptide(boolean groundStep) {
+        riptideTicks = 0;
+        riptideActive = true;
+        riptideGroundStepPending = groundStep;
+    }
+
+    public void finishRiptideTick() {
+        if (!riptideActive) return;
+        riptideTicks++;
+        if (collideX || collideZ || riptideTicks >= RiptidePhysics.MAX_SPIN_TICKS
+                || (riptideTicks > RiptidePhysics.GROUND_STOP_DELAY_TICKS && onGround)) {
+            stopRiptide();
+        }
+    }
+
+    public void stopRiptide() {
+        riptideTicks = 0;
+        riptideActive = false;
+        riptideGroundStepPending = false;
+    }
+
+    public boolean riptideActive() {
+        return riptideActive;
+    }
+
+    public boolean riptideGroundStepPending() {
+        return riptideGroundStepPending;
+    }
+
+    public void consumeRiptideGroundStep() {
+        riptideGroundStepPending = false;
     }
 
     public FloatBox boundingBox() {
@@ -860,6 +897,7 @@ public final class AuthoritativeMotionState {
         private final int supportingBlockX;
         private final int supportingBlockY;
         private final int supportingBlockZ;
+        private final int riptideTicks;
         private final long ticksSinceKnockback;
         private final int rawJumpGraceCooldown;
         private final int supportedBranchRecoveryCooldown;
@@ -873,6 +911,8 @@ public final class AuthoritativeMotionState {
         private final boolean gliding;
         private final boolean sprinting;
         private final boolean jumping;
+        private final boolean riptideActive;
+        private final boolean riptideGroundStepPending;
 
         private MotionSnapshot(AuthoritativeMotionState state) {
             position = state.position;
@@ -890,6 +930,7 @@ public final class AuthoritativeMotionState {
             supportingBlockX = state.supportingBlockX;
             supportingBlockY = state.supportingBlockY;
             supportingBlockZ = state.supportingBlockZ;
+            riptideTicks = state.riptideTicks;
             ticksSinceKnockback = state.ticksSinceKnockback;
             rawJumpGraceCooldown = state.rawJumpGraceCooldown;
             supportedBranchRecoveryCooldown = state.supportedBranchRecoveryCooldown;
@@ -903,6 +944,8 @@ public final class AuthoritativeMotionState {
             gliding = state.gliding;
             sprinting = state.sprinting;
             jumping = state.jumping;
+            riptideActive = state.riptideActive;
+            riptideGroundStepPending = state.riptideGroundStepPending;
         }
 
         public boolean onGround() {
@@ -937,6 +980,7 @@ public final class AuthoritativeMotionState {
             state.supportingBlockX = supportingBlockX;
             state.supportingBlockY = supportingBlockY;
             state.supportingBlockZ = supportingBlockZ;
+            state.riptideTicks = riptideTicks;
             state.ticksSinceKnockback = ticksSinceKnockback;
             state.rawJumpGraceCooldown = rawJumpGraceCooldown;
             state.supportedBranchRecoveryCooldown = supportedBranchRecoveryCooldown;
@@ -950,6 +994,8 @@ public final class AuthoritativeMotionState {
             state.gliding = gliding;
             state.sprinting = sprinting;
             state.jumping = jumping;
+            state.riptideActive = riptideActive;
+            state.riptideGroundStepPending = riptideGroundStepPending;
         }
     }
 }

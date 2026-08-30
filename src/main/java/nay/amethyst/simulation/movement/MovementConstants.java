@@ -9,6 +9,7 @@ public final class MovementConstants {
     public static final float STEP_HEIGHT = 0.5625f;
     public static final float SLIDE_OFFSET_MULTIPLIER = 0.4f;
     public static final float CLIMB_SPEED = 0.2f;
+    public static final float PREVENTED_JUMP_MULTIPLIER = 0.6f;
     public static final float CONSUMING_INPUT = 0.1225f;
     public static final float SNEAK_INPUT = 0.3f;
     public static final float PLAYER_HEIGHT_OFFSET = 1.62f;

@@ -26,6 +26,8 @@ public interface MovementWorldView {
     /** Whether a boat or minecart is close enough to carry or block the player. */
     boolean hasSolidEntityNearby(FloatBox area);
 
+    /** Whether a solid entity intersects this exact area. */
+    boolean hasSolidEntityIntersecting(FloatBox area);
 
     MovementBlockPosition supportingBlock(FloatBox area, FloatVector playerPosition);
 }

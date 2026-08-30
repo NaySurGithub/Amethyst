@@ -175,6 +175,17 @@ public final class FrameWorldView implements MovementWorldView {
         return false;
     }
 
+    @Override
+    public boolean hasSolidEntityIntersecting(FloatBox area) {
+        List<Aabb> boxes = frame.solidEntityBoxes();
+        if (boxes.isEmpty()) return false;
+        Aabb probe = toAabb(area);
+        for (Aabb box : boxes) {
+            if (box.intersects(probe)) return true;
+        }
+        return false;
+    }
+
     private static boolean intersectsCell(FloatBox area, BlockPos position) {
         return area.maxX() > position.x() && area.minX() < position.x() + 1.0f
                 && area.maxY() > position.y() && area.minY() < position.y() + 1.0f

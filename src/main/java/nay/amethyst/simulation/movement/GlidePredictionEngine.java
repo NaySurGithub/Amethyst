@@ -12,6 +12,7 @@ public final class GlidePredictionEngine extends PredictionEngine {
 
     @Override
     public MovementSimulator.SimulationResult run() {
+        applyKnockback();
         float yaw = state.rotation().z() * DEGREES_TO_RADIANS;
         float pitch = state.rotation().x() * DEGREES_TO_RADIANS;
         float yawCosine = MovementConstants.cos(-yaw - (float) Math.PI);

@@ -56,7 +56,7 @@ public final class WaterPredictionEngine extends PredictionEngine {
         if (!state.swimming() && !state.onGround()) {
             strider *= 0.5f;
         }
-        float drag = state.sprinting() || state.stopSwimming() ? FAST_DRAG : DRAG;
+        float drag = state.sprinting() ? FAST_DRAG : DRAG;
         drag += (DEPTH_STRIDER_DRAG - drag) * strider;
 
         FloatVector velocity = state.velocity();

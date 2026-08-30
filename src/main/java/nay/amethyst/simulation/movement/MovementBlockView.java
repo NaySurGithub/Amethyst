@@ -13,4 +13,8 @@ public record MovementBlockView(String id, float friction, boolean liquid,
     public boolean named(String name) {
         return id.equals(name) || id.equals("minecraft:" + name);
     }
+
+    public boolean preventsJumping() {
+        return named("honey") || named("honey_block");
+    }
 }

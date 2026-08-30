@@ -68,6 +68,9 @@ public final class MovementPacketProcessor {
     private static final int SLEEP_GRACE_TICKS = 100;
     private static final double MAX_SIMULATED_MOVEMENT_SPEED = 0.5;
     private static final int GROUND_SPOOF_TICKS = 6;
+    private static final int AIR_STALL_TICKS = 6;
+    private static final double AIR_STALL_MAXIMUM_DELTA = 0.025;
+    private static final double AIR_STALL_MINIMUM_FALL_SPEED = -0.12;
 
     private final AmethystPlugin plugin;
     private final Map<UUID, PlayerData> players;
@@ -160,8 +163,7 @@ public final class MovementPacketProcessor {
                 observedDelta, observedMovement);
         data.nearServerMotionTick = !serverMotionRecovery
                 && data.nearServerMotion(observedDelta, observedMovement);
-        boolean bypassed = data.inGrace() || serverMotionRecovery
-                || MovementCheckSupport.riptideAvailable(player);
+        boolean bypassed = data.inGrace() || serverMotionRecovery;
         if (bypassed) {
             data.motion.ready(false);
             data.motion.updateInput(input);
@@ -192,6 +194,9 @@ public final class MovementPacketProcessor {
                     data.lastGlideTick = data.lastTick;
                 }
                 inspectGroundSpoof(event, player, data, clientPosition);
+                if (inspectAirStall(event, player, data, result, observedMovement)) {
+                    return;
+                }
                 inspectCobweb(event, player, data, clientPosition, observedMovement);
                 inspectSprint(event, player, data);
                 trackLevitation(player, data);
@@ -260,12 +265,15 @@ public final class MovementPacketProcessor {
 
     public void scheduleMovementCorrection(Player player, PlayerData data, boolean alert) {
         Vec3 position = data.lastVerifiedPosition;
-        if (position == null) return;
+        Location safe = data.safeLocation;
+        if (position == null && safe == null) return;
         if (!data.beginMovementCorrection()) return;
-        directTeleportSetback(player, data, position.x(),
-                position.y() - MovementConstants.CORRECTION_HEIGHT_OFFSET, position.z(),
-                data.predictedOnGround,
-                "position=" + position + " tick=" + Math.max(0, data.lastTick), alert);
+        double x = position == null ? safe.x : position.x();
+        double y = position == null ? safe.y
+                : position.y() - MovementConstants.CORRECTION_HEIGHT_OFFSET;
+        double z = position == null ? safe.z : position.z();
+        directTeleportSetback(player, data, x, y, z, true,
+                "position=" + new Vec3(x, y, z) + " tick=" + Math.max(0, data.lastTick), alert);
     }
 
     public void trackGlideBoost(Player player, PlayerData data, InventoryTransactionPacket packet) {
@@ -380,9 +388,19 @@ public final class MovementPacketProcessor {
         if (!data.beginMovementCorrection()) {
             return;
         }
-        FloatVector target = result.authoritativePosition();
+        Vec3 verified = data.lastVerifiedPosition;
+        Location safe = data.safeLocation;
+        FloatVector target = verified != null
+                ? new FloatVector((float) verified.x(),
+                        (float) (verified.y() - MovementConstants.CORRECTION_HEIGHT_OFFSET),
+                        (float) verified.z())
+                : safe != null
+                        ? new FloatVector((float) safe.x, (float) safe.y, (float) safe.z)
+                        : new FloatVector((float) player.getX(), (float) player.getY(),
+                                (float) player.getZ());
+        boolean targetOnGround = verified != null || safe != null;
         directTeleportSetback(player, data, target.x(), target.y(), target.z(),
-                result.onGround(),
+                targetOnGround,
                 "offset=" + NetworkCheckSupport.format(result.offset())
                         + " client=" + result.clientPosition()
                         + " predicted=" + result.authoritativePosition()
@@ -409,6 +427,38 @@ public final class MovementPacketProcessor {
         data.groundSpoofBuffer = 0;
         violations.fail(event, player, data, CheckType.GROUND_SPOOF_A, 1,
                 "position=" + position, false, false);
+    }
+
+    private boolean inspectAirStall(PacketReceiveEvent event, Player player, PlayerData data,
+                                    MovementPipelineResult result, Vec3 observedMovement) {
+        boolean exempt = plugin.settings().disabled(CheckType.FLY_A.id())
+                || data.inGrace() || data.hasMovementCorrection()
+                || data.hasPendingTeleport() || data.nearServerMotionTick
+                || result.ticksSinceImpulse() < IMPULSE_TOLERANCE_TICKS
+                || !result.anchored() || result.inFluid() || result.onGround()
+                || data.motion.riptideActive() || data.motion.gliding()
+                || data.motion.wearingElytra() || player.getAllowFlight()
+                || player.isFlying() || player.isSpectator() || player.getRiding() != null;
+        boolean stalled = !exempt
+                && Math.abs(observedMovement.y()) <= AIR_STALL_MAXIMUM_DELTA
+                && result.authoritativeVelocity().y() <= AIR_STALL_MINIMUM_FALL_SPEED
+                && result.positionDifference().y() < -0.1f;
+        if (!stalled) {
+            data.airStallBuffer = 0;
+            return false;
+        }
+        if (++data.airStallBuffer < AIR_STALL_TICKS) {
+            return false;
+        }
+
+        data.airStallBuffer = 0;
+        violations.fail(event, player, data, CheckType.FLY_A, 1,
+                "air-stall dy=" + NetworkCheckSupport.format(observedMovement.y())
+                        + " expected-vy="
+                        + NetworkCheckSupport.format(result.authoritativeVelocity().y()),
+                true, false);
+        scheduleMovementCorrection(player, data, false);
+        return true;
     }
 
     private void inspectCobweb(PacketReceiveEvent event, Player player, PlayerData data,
@@ -615,7 +665,11 @@ public final class MovementPacketProcessor {
         data.simulationOffsetBuffer = Math.max(0.0, data.simulationOffsetBuffer + excess
                 - plugin.settings().predictionBufferDecay());
 
-        if (data.simulationOffsetBuffer <= 0.0 && result.onGround()) {
+        Vector3f verifiedPacketPosition = Vector3f.from(result.clientPosition().x(),
+                result.clientPosition().y() + MovementConstants.CORRECTION_HEIGHT_OFFSET,
+                result.clientPosition().z());
+        if (data.simulationOffsetBuffer <= 0.0 && result.onGround()
+                && MovementCheckSupport.serverGround(player, verifiedPacketPosition)) {
             data.lastVerifiedPosition = new Vec3(result.clientPosition().x(),
                     result.clientPosition().y() + MovementConstants.CORRECTION_HEIGHT_OFFSET,
                     result.clientPosition().z());
@@ -822,6 +876,8 @@ public final class MovementPacketProcessor {
                 : null;
 
         Vec3 best = null;
+        boolean bestIsRiptide = false;
+        boolean riptideGroundStep = false;
         double bestDistance = BURST_MATCH_DISTANCE;
 
         List<Vec3> candidates = new ArrayList<>(data.windChargeCandidates());
@@ -829,12 +885,14 @@ public final class MovementPacketProcessor {
         if (lunge != null) {
             candidates.add(lunge);
         }
+        List<Vec3> riptide = data.riptideCandidates();
 
         for (Vec3 candidate : candidates) {
             double distance = candidate.distance(observedMovement);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 best = candidate;
+                bestIsRiptide = false;
             }
             if (pending == null) {
                 continue;
@@ -844,6 +902,37 @@ public final class MovementPacketProcessor {
             if (combinedDistance < bestDistance) {
                 bestDistance = combinedDistance;
                 best = combined;
+                bestIsRiptide = false;
+            }
+        }
+
+        boolean groundStep = data.riptideGroundStep();
+        for (Vec3 candidate : riptide) {
+            Vec3 movement = groundStep ? candidate.add(0.0, 1.0, 0.0) : candidate;
+            double distance = movement.distance(observedMovement);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = candidate;
+                bestIsRiptide = true;
+                riptideGroundStep = groundStep;
+            }
+            double clippedStepDistance = candidate.distance(observedMovement);
+            if (clippedStepDistance < bestDistance) {
+                bestDistance = clippedStepDistance;
+                best = candidate;
+                bestIsRiptide = true;
+                riptideGroundStep = false;
+            }
+            if (pending == null) continue;
+            Vec3 combinedVelocity = candidate.add(pending);
+            Vec3 combinedMovement = groundStep
+                    ? combinedVelocity.add(0.0, 1.0, 0.0) : combinedVelocity;
+            double combinedDistance = combinedMovement.distance(observedMovement);
+            if (combinedDistance < bestDistance) {
+                bestDistance = combinedDistance;
+                best = combinedVelocity;
+                bestIsRiptide = true;
+                riptideGroundStep = groundStep;
             }
         }
 
@@ -853,6 +942,10 @@ public final class MovementPacketProcessor {
 
         data.motion.knockback(new FloatVector((float) best.x(), (float) best.y(),
                 (float) best.z()));
+        if (bestIsRiptide) {
+            data.motion.startRiptide(riptideGroundStep);
+            data.clearRiptideCandidates();
+        }
         data.clearWindChargeCandidates();
         data.clearSpearLungeCandidate();
     }
@@ -909,10 +1002,10 @@ public final class MovementPacketProcessor {
             data.stageDirectSetback(Vector3f.from(x,
                     y + MovementConstants.CORRECTION_HEIGHT_OFFSET, z), onGround);
 
-            data.finishMovementCorrection();
             if (!player.teleport(target, PlayerTeleportEvent.TeleportCause.PLUGIN)) {
                 data.setbackTeleportPending = false;
                 data.clearDirectSetback();
+                data.finishMovementCorrection();
                 data.finishSimulationCorrectionEpisode();
                 return;
             }

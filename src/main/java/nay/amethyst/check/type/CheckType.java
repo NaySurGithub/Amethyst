@@ -21,6 +21,7 @@ public enum CheckType {
     AUTOCLICKER_A("Autoclicker-A", "Clicked faster than a hand can."),
     INV_MOVE_A("InvMove-A", "Directed movement during an inventory interaction."),
     TIMER("Timer", "The client sent more frames than its network credit allows."),
+    FLY_A("Fly-A", "The player repeatedly stalled in air while gravity required a fall.", true),
     SIMULATION("Simulation", "The server corrected movement that did not match its simulation.", true),
     VEHICLE_A("Vehicle-A", "Vehicle movement did not match the simulation.", true),
     NO_FALL_A("NoFall-A", "Fall damage did not match the simulated fall.", true),

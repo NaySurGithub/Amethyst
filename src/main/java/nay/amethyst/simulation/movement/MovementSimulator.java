@@ -10,28 +10,30 @@ public final class MovementSimulator {
     public SimulationResult simulate(AuthoritativeMotionState state,
                                      MovementWorldView world,
                                      float correctionThreshold) {
-        if (attemptTeleport(state)) {
+        if (attemptTeleport(state, world)) {
             state.movement(state.velocity());
-            return result(state, true);
+            return finishRiptideTick(state, result(state, true));
         }
 
         if (!reliable(state, world)) {
             state.resetToClient();
-            return result(state, false);
+            return finishRiptideTick(state, result(state, false));
         }
         if (!world.contains(state.boundingBox().grow(1.0f, 1.0f, 1.0f))) {
             state.resetToClient();
-            return result(state, false);
+            return finishRiptideTick(state, result(state, false));
         }
         if (state.immobile() || !state.ready()) {
             state.velocity(FloatVector.ZERO);
-            return result(state, false);
+            return finishRiptideTick(state, result(state, false));
         }
         if (state.velocity().lengthSquared() < 1.0E-12f) {
             state.velocity(FloatVector.ZERO);
         }
 
-        return engineFor(state, world, correctionThreshold).run();
+        applyRiptideGroundStep(state, world, correctionThreshold);
+        SimulationResult result = engineFor(state, world, correctionThreshold).run();
+        return finishRiptideTick(state, result);
     }
 
     private PredictionEngine engineFor(AuthoritativeMotionState state, MovementWorldView world,
@@ -57,11 +59,8 @@ public final class MovementSimulator {
         if (state.hasTeleport()) {
             return true;
         }
-        if (state.swimming() && world.fluidState(state.boundingBox()).water()) {
-            return false;
-        }
         if (world.hasMovingBlock(state.boundingBox())
-                || world.hasSolidEntityNearby(state.boundingBox())
+                || !state.riptideActive() && world.hasSolidEntityNearby(state.boundingBox())
                 || world.hasBambooNearby(state.boundingBox())
                 || world.hasScaffoldingIntersection(state.boundingBox())
                 || world.hasScaffoldingIntersection(state.clientBoundingBox())
@@ -72,7 +71,19 @@ public final class MovementSimulator {
                 && state.alive() && state.supportedGameMode();
     }
 
-    private static boolean attemptTeleport(AuthoritativeMotionState state) {
+    private void applyRiptideGroundStep(AuthoritativeMotionState state, MovementWorldView world,
+                                         float correctionThreshold) {
+        if (!state.riptideGroundStepPending()) return;
+        FloatVector velocity = state.hasKnockback() ? state.knockback() : state.velocity();
+        state.velocity(velocity);
+        state.velocity(new FloatVector(0.0f, 1.0f, 0.0f));
+        collisions.move(state, world, correctionThreshold);
+        state.velocity(velocity);
+        state.consumeRiptideGroundStep();
+    }
+
+    private static boolean attemptTeleport(AuthoritativeMotionState state,
+                                           MovementWorldView world) {
         if (!state.hasTeleport()) {
             return false;
         }
@@ -80,7 +91,7 @@ public final class MovementSimulator {
             state.position(state.teleportPosition());
             state.velocity(FloatVector.ZERO);
             state.jumpDelay(0);
-            applyTeleportJump(state);
+            applyTeleportJump(state, world);
             return true;
         }
         FloatVector difference = state.teleportPosition().subtract(state.position());
@@ -93,13 +104,21 @@ public final class MovementSimulator {
         return false;
     }
 
-    private static void applyTeleportJump(AuthoritativeMotionState state) {
+    private static void applyTeleportJump(AuthoritativeMotionState state,
+                                          MovementWorldView world) {
         if (!state.jumping() || !state.onGround() || state.jumpDelay() > 0) {
             return;
         }
         FloatVector velocity = state.velocity();
         float x = velocity.x();
-        float y = Math.max(state.jumpHeight(), velocity.y());
+        FloatBox box = state.boundingBox();
+        int xBlock = (int) Math.floor(state.position().x());
+        int zBlock = (int) Math.floor(state.position().z());
+        int feetY = (int) Math.floor(box.minY());
+        boolean prevented = world.block(xBlock, feetY, zBlock).preventsJumping()
+                || world.block(xBlock, feetY - 1, zBlock).preventsJumping();
+        float multiplier = prevented ? MovementConstants.PREVENTED_JUMP_MULTIPLIER : 1.0f;
+        float y = state.jumpHeight() * multiplier;
         float z = velocity.z();
         state.jumpDelay(MovementConstants.JUMP_DELAY_TICKS);
         if (state.sprinting()) {
@@ -114,6 +133,12 @@ public final class MovementSimulator {
         return new SimulationResult(state.position(), state.velocity(), state.movement(),
                 state.onGround(), state.collideX(), state.collideY(), state.collideZ(), reliable,
                 false);
+    }
+
+    private static SimulationResult finishRiptideTick(AuthoritativeMotionState state,
+                                                        SimulationResult result) {
+        state.finishRiptideTick();
+        return result;
     }
 
     public record SimulationResult(FloatVector position, FloatVector velocity,

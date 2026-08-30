@@ -43,6 +43,10 @@ carries a server-owned motion state forward through the real Bedrock tick order.
 own, and the trigonometry goes through a reimplementation of Mojang's sine table, so the float error matches
 the client rather than merely being close to it.
 
+Riptide is simulated as part of that state: charge, enchantment-level impulse, the grounded upward step,
+spin lifetime, gravity, collision response and retained velocity are tracked instead of globally exempting the
+player for the duration of the launch.
+
 It is authoritative, not observational: the inbound packet is rewritten with the simulated position before the
 server sees it.
 
@@ -81,6 +85,7 @@ acknowledgement-gated, so the simulation only adopts a change once the client ha
 | Check | What it means |
 | --- | --- |
 | `Simulation` | Movement the physics simulation could not explain. Feeds the buffer; drives setbacks. |
+| `Fly-A` | Repeated near-zero vertical movement while the authoritative simulation requires the player to fall. |
 | `Velocity-A` | A melee knockback the player did not travel, or travelled far beyond. The missing part is given back by moving them. |
 | `Timer` | More client frames than ticks elapsed, which is a client running its own simulation fast. |
 | `Vehicle-A` | Boat, minecart or mount movement that did not match its own prediction. The vehicle is sent back, not its rider. |
@@ -107,11 +112,12 @@ acknowledgement-gated, so the simulation only adopts a change once the client ha
 | `BadPacket-A…Q` | Malformed or impossible packet fields: values, states and identifiers the protocol cannot produce. A block placed without looking at it is refused here too. |
 
 Invalid packets are cancelled. Repeated movement violations cause a setback to the last verified ground
-position, and a player who has not reached one yet is only alerted on. `Timer` past a sustained run of
+position, falling back to the last server-safe location before a ground anchor exists. A correction remains
+active until the client acknowledges it, so rejected movement cannot move the next setback target. `Timer` past a sustained run of
 violations, `BedrockTool-A` on sight, and two of the `BadPacket` variants kick; nothing else does, and Amethyst
 never bans.
 
-Situations the game itself makes unpredictable - pistons, riptide, a player pushed inside a block, the moment
+Situations the game itself makes unpredictable - pistons, a player pushed inside a block, the moment
 after a teleport - suspend the movement check rather than guess at it. They are handled conservatively so that
 a legitimate player is never punished for them.
 

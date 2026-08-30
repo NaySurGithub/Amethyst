@@ -70,6 +70,13 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
             state.velocity(FloatVector.ZERO);
         }
 
+        if (recoverRiptideLanding()) {
+            state.resetToClient();
+            state.onGround(true);
+            state.clearSupportingBlock();
+            return result(false);
+        }
+
         if (recoverSupportedClientBranch()) {
             state.resetToClient();
             state.onGround(true);
@@ -102,13 +109,33 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
         return result(true);
     }
 
+    /**
+     * Bedrock can resolve a fast diagonal Riptide descent onto the collision beneath
+     * the reported client position while the server's Y-first sweep follows the
+     * neighbouring column. Keep that geometrically valid landing branch.
+     */
+    private boolean recoverRiptideLanding() {
+        if (!state.riptideActive()) {
+            return false;
+        }
+        FloatVector difference = state.position().subtract(state.client().position());
+        if (difference.y() >= -correctionThreshold
+                || difference.horizontalLengthSquared() > 1.0f
+                || state.velocity().y() >= -0.08f
+                || state.client().movement().y() < -0.08f
+                || !world.collisionBoxes(state.clientBoundingBox()).isEmpty()) {
+            return false;
+        }
+        return hasSupport(world, state.clientBoundingBox(), 0.08f);
+    }
+
     private void applyJump() {
         if (!state.jumping() || !state.onGround() || state.jumpDelay() > 0) {
             return;
         }
         FloatVector velocity = state.velocity();
         float x = velocity.x();
-        float y = Math.max(state.jumpHeight(), velocity.y());
+        float y = state.jumpHeight() * jumpPreventionMultiplier();
         float z = velocity.z();
         state.jumpDelay(MovementConstants.JUMP_DELAY_TICKS);
         if (state.sprinting()) {
@@ -164,6 +191,10 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
         float x = state.collideX() ? 0.0f : velocity.x();
         float y = velocity.y();
         float z = state.collideZ() ? 0.0f : velocity.z();
+        if (state.riptideActive()) {
+            state.velocity(new FloatVector(x, y, z));
+            return;
+        }
         if (!oldOnGround && state.collideY()) {
             if (oldVelocity.y() >= 0.0f || state.pressingSneak()) {
                 y = 0.0f;

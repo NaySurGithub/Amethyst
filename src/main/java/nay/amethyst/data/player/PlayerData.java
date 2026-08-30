@@ -51,6 +51,7 @@ public final class PlayerData {
     public int timerInputs;
     public int timerTicks;
     public int groundSpoofBuffer;
+    public int airStallBuffer;
     public int cobwebBuffer;
     public int sprintFoodBuffer;
     public int sprintUseBuffer;
@@ -67,6 +68,7 @@ public final class PlayerData {
     private int rightCps;
     public long lastGlideStartTick = Long.MIN_VALUE;
     public long itemUseStartTick = Long.MIN_VALUE;
+    public long riptideUseStartTick = Long.MIN_VALUE;
     /** Last ground position the simulation agreed with, and the target of a setback. */
     public Vec3 lastVerifiedPosition;
     public Vec3 lastVerifiedVehiclePosition;
@@ -173,6 +175,9 @@ public final class PlayerData {
     private long windChargeUntilInputSequence;
     private Vec3 spearLungeCandidate;
     private long spearLungeUntilInputSequence;
+    private List<Vec3> riptideCandidates = List.of();
+    private long riptideUntilInputSequence;
+    private boolean riptideGroundStep;
     private final List<Vec3> serverMotionCandidates = new ArrayList<>();
     private long serverMotionUntilInputSequence;
     public synchronized void addPendingTeleport() {
@@ -287,6 +292,7 @@ public final class PlayerData {
         windChargeUntilInputSequence = 0;
         spearLungeCandidate = null;
         spearLungeUntilInputSequence = 0;
+        stopRiptide();
         serverMotionCandidates.clear();
         serverMotionUntilInputSequence = 0;
         gracePeriods.revoke(GraceReason.VELOCITY);
@@ -345,6 +351,37 @@ public final class PlayerData {
     public synchronized void clearSpearLungeCandidate() {
         spearLungeCandidate = null;
         spearLungeUntilInputSequence = 0;
+    }
+
+    public synchronized void setRiptideCandidates(List<Vec3> candidates, boolean groundStep) {
+        riptideCandidates = List.copyOf(candidates);
+        riptideUntilInputSequence = inputSequence + 4;
+        riptideGroundStep = groundStep;
+    }
+
+    public synchronized List<Vec3> riptideCandidates() {
+        if (inputSequence > riptideUntilInputSequence) clearRiptideCandidates();
+        return riptideCandidates;
+    }
+
+    public synchronized boolean riptideActive() {
+        return !riptideCandidates().isEmpty() || motion.riptideActive();
+    }
+
+    public synchronized boolean riptideGroundStep() {
+        riptideCandidates();
+        return riptideGroundStep;
+    }
+
+    public synchronized void clearRiptideCandidates() {
+        riptideCandidates = List.of();
+        riptideUntilInputSequence = 0;
+        riptideGroundStep = false;
+    }
+
+    public synchronized void stopRiptide() {
+        clearRiptideCandidates();
+        motion.stopRiptide();
     }
 
     public synchronized void addServerMotionCandidate(Vec3 candidate) {
@@ -443,6 +480,7 @@ public final class PlayerData {
         timerInputs = 0;
         timerTicks = 0;
         groundSpoofBuffer = 0;
+        airStallBuffer = 0;
         cobwebBuffer = 0;
         sprintFoodBuffer = 0;
         sprintUseBuffer = 0;
@@ -454,6 +492,7 @@ public final class PlayerData {
         vehicleClaimBuffer = 0;
         lastGlideStartTick = Long.MIN_VALUE;
         itemUseStartTick = Long.MIN_VALUE;
+        riptideUseStartTick = Long.MIN_VALUE;
         directSetback = null;
         resetMovementPipeline();
         lastGroundedInputSequence = -1;
@@ -514,6 +553,7 @@ public final class PlayerData {
     }
 
     public synchronized void resetMovementPipeline() {
+        clearRiptideCandidates();
         motion = new AuthoritativeMotionState();
         movementPipeline = new AuthoritativeMovementPipeline(motion, MovementOptions.defaults());
     }

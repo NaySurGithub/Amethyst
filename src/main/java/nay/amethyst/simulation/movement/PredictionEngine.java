@@ -26,6 +26,12 @@ public abstract class PredictionEngine {
         if (state.hasKnockback()) {
             state.velocity(state.knockback());
         }
+        if (state.riptideActive()
+                && world.hasSolidEntityIntersecting(state.boundingBox().grow(1.0f, 1.0f, 1.0f))) {
+            state.velocity(state.velocity().multiply(RiptidePhysics.ENTITY_IMPACT_MULTIPLIER));
+            state.fallDistance(0.0f);
+            state.stopRiptide();
+        }
     }
 
     protected void moveRelative(float speed) {
@@ -95,6 +101,19 @@ public abstract class PredictionEngine {
     protected MovementBlockView blockUnder(float distance) {
         FloatVector position = state.position().add(0.0f, -distance, 0.0f);
         return world.block(floor(position.x()), floor(position.y()), floor(position.z()));
+    }
+
+    protected float jumpPreventionMultiplier() {
+        if (!state.onGround()) {
+            return 1.0f;
+        }
+        FloatBox box = state.boundingBox();
+        int x = floor(state.position().x());
+        int z = floor(state.position().z());
+        int feetY = floor(box.minY());
+        return world.block(x, feetY, z).preventsJumping()
+                || world.block(x, feetY - 1, z).preventsJumping()
+                ? MovementConstants.PREVENTED_JUMP_MULTIPLIER : 1.0f;
     }
 
     protected MovementSimulator.SimulationResult result(boolean reliable) {

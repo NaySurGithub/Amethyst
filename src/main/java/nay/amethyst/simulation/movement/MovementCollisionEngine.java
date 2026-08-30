@@ -67,7 +67,12 @@ public final class MovementCollisionEngine {
         state.collisions(xCollision, yCollision, zCollision);
         state.onGround(yCollision && requested.y() < 0.0f
                 || state.onGround() && !yCollision && Math.abs(requested.y()) <= COLLISION_EPSILON);
-        state.velocity(resolved);
+        if (state.riptideActive()) {
+            state.velocity(new FloatVector(xCollision ? 0.0f : requested.x(), requested.y(),
+                    zCollision ? 0.0f : requested.z()));
+        } else {
+            state.velocity(resolved);
+        }
         updateSupportingBlock(state, world, requested);
     }
 
