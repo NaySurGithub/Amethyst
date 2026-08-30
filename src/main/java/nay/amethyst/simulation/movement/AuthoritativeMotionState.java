@@ -147,7 +147,8 @@ public final class AuthoritativeMotionState {
         impulseSideways = MovementConstants.clamp(input.moveSideways(), -maximumInput, maximumInput) * 0.98f;
         impulseForward = MovementConstants.clamp(input.moveForward(), -maximumInput, maximumInput) * 0.98f;
 
-        jumping = input.has(MovementInputFlag.START_JUMPING);
+        jumping = input.has(MovementInputFlag.START_JUMPING)
+                || input.has(MovementInputFlag.JUMP_PRESSED_RAW);
         pressingJump = input.has(MovementInputFlag.JUMPING);
         jumpHeight = 0.42f + jumpBoostLevel * 0.1f;
         if (!pressingJump) jumpDelay = 0;

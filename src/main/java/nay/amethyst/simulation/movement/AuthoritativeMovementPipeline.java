@@ -35,13 +35,15 @@ public final class AuthoritativeMovementPipeline {
         impulseDeferred = false;
         MovementSimulator.SimulationResult simulation = simulateBestBranch(world, hadTeleport,
                 hadKnockback);
+        boolean inFluidTransition = simulation.inFluid()
+                || world.fluidState(state.clientBoundingBox()).any();
 
         FloatVector predictedPosition = state.position();
         FloatVector positionDifference = state.position().subtract(state.client().position());
         FloatVector velocityDifference = state.velocity().subtract(state.client().velocity());
         boolean needsCorrection = positionDifference.length() > options.correctionThreshold();
         boolean correctionRequired = simulation.reliable()
-                && !simulation.inFluid()
+                && !inFluidTransition
                 && !wasGliding
                 && needsCorrection
                 && state.pendingTeleports() == 0
@@ -84,7 +86,7 @@ public final class AuthoritativeMovementPipeline {
 
         return new MovementPipelineResult(state.client().position(), predictedPosition,
                 state.velocity(), forwarded, positionDifference, velocityDifference,
-                correctionRequired, simulation.reliable(), simulation.inFluid(),
+                correctionRequired, simulation.reliable(), inFluidTransition,
                 hadKnockback && !impulseDeferred, impulseDeferred, state.ticksSinceKnockback(), anchored,
                 describeSupport(world), state.supportingBlockY(), describeBelow(world),
                 state.onGround(), input.tick());

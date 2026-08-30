@@ -640,6 +640,10 @@ public final class MovementPacketProcessor {
             data.movementPacketDropped = false;
             return;
         }
+        if (result.ticksSinceImpulse() <= VELOCITY_OBSERVE_TICKS) {
+            data.simulationOffsetBuffer = 0.0;
+            return;
+        }
 
         if (result.offset() > DESYNC_OFFSET) {
             data.simulationOffsetBuffer = 0.0;
