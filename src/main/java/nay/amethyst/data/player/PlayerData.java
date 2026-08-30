@@ -36,6 +36,8 @@ public final class PlayerData {
     private long movementCorrectionDeadline;
     private boolean simulationCorrectionEpisode;
     public int simulationMismatchFrames;
+    public int phaseFrames;
+    public Vec3 phaseEntry;
     public double simulationOffsetBuffer;
     public boolean nearServerMotionTick;
     public volatile boolean movementPacketDropped;
@@ -494,6 +496,8 @@ public final class PlayerData {
         itemUseStartTick = Long.MIN_VALUE;
         riptideUseStartTick = Long.MIN_VALUE;
         directSetback = null;
+        phaseFrames = 0;
+        phaseEntry = null;
         resetMovementPipeline();
         lastGroundedInputSequence = -1;
         noFallBuffer = 0;

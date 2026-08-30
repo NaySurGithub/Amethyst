@@ -12,13 +12,21 @@ import org.powernukkitx.math.AxisAlignedBB;
 import org.powernukkitx.math.SimpleAxisAlignedBB;
 import org.powernukkitx.level.Location;
 
+import java.util.Set;
+
 public final class MovementCheckSupport {
+    private static final double HITBOX_INSET = 0.03;
+    private static final double CUBE_EPSILON = 1.0E-6;
+    private static final Set<String> SHAPE_EXEMPT_BLOCKS = Set.of(BlockID.MOVING_BLOCK,
+            BlockID.PISTON, BlockID.STICKY_PISTON, BlockID.PISTON_ARM_COLLISION,
+            BlockID.STICKY_PISTON_ARM_COLLISION, BlockID.BAMBOO, BlockID.SCAFFOLDING);
+
     private MovementCheckSupport() {
     }
 
     public static boolean isMovementCheck(CheckType check) {
         return check == CheckType.SIMULATION || check == CheckType.FLY_A || check == CheckType.TIMER
-                || check == CheckType.VEHICLE_A
+                || check == CheckType.VEHICLE_A || check == CheckType.PHASE_A
                 || check == CheckType.NO_FALL_A || check == CheckType.VELOCITY_A;
     }
 
@@ -32,6 +40,62 @@ public final class MovementCheckSupport {
             return true;
         }
         return false;
+    }
+
+    /**
+     * Whether the player's hitbox overlaps a block that is a full solid cube. Blocks carrying any
+     * custom collision shape are ignored, so only a wall the client cannot legally stand inside is
+     * reported.
+     */
+    public static boolean insideFullCube(Player player, Vector3f position) {
+        double half = player.getWidth() / 2.0 - HITBOX_INSET;
+        double feet = position.getY() - player.getBaseOffset();
+        double minimumX = position.getX() - half;
+        double maximumX = position.getX() + half;
+        double minimumY = feet + HITBOX_INSET;
+        double maximumY = feet + player.getHeight() - HITBOX_INSET;
+        double minimumZ = position.getZ() - half;
+        double maximumZ = position.getZ() + half;
+        if (maximumY <= minimumY) {
+            return false;
+        }
+
+        for (int x = floor(minimumX); x <= floor(maximumX); x++) {
+            for (int y = floor(minimumY); y <= floor(maximumY); y++) {
+                for (int z = floor(minimumZ); z <= floor(maximumZ); z++) {
+                    Block block = player.getLevel().getBlock(x, y, z, 0);
+                    if (!isFullCube(block)) {
+                        continue;
+                    }
+                    AxisAlignedBB box = block.getCollisionBoundingBox();
+                    if (box.getMaxX() > minimumX && box.getMinX() < maximumX
+                            && box.getMaxY() > minimumY && box.getMinY() < maximumY
+                            && box.getMaxZ() > minimumZ && box.getMinZ() < maximumZ) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean isFullCube(Block block) {
+        if (block == null || block.isAir() || !block.isSolid() || block.canPassThrough()) {
+            return false;
+        }
+        if (SHAPE_EXEMPT_BLOCKS.contains(block.getId())) {
+            return false;
+        }
+        AxisAlignedBB box = block.getCollisionBoundingBox();
+        if (box == null) {
+            return false;
+        }
+        return Math.abs(box.getMinX() - block.getFloorX()) <= CUBE_EPSILON
+                && Math.abs(box.getMinY() - block.getFloorY()) <= CUBE_EPSILON
+                && Math.abs(box.getMinZ() - block.getFloorZ()) <= CUBE_EPSILON
+                && Math.abs(box.getMaxX() - (block.getFloorX() + 1.0)) <= CUBE_EPSILON
+                && Math.abs(box.getMaxY() - (block.getFloorY() + 1.0)) <= CUBE_EPSILON
+                && Math.abs(box.getMaxZ() - (block.getFloorZ() + 1.0)) <= CUBE_EPSILON;
     }
 
     /** Whether anything under the player has a collision box smaller than a full cube. */
@@ -108,6 +172,10 @@ public final class MovementCheckSupport {
     }
 
     private static int floor(float value) {
+        return (int) Math.floor(value);
+    }
+
+    private static int floor(double value) {
         return (int) Math.floor(value);
     }
 }

@@ -54,6 +54,8 @@ public final class MovementPacketProcessor {
     private static final double VELOCITY_MAXIMUM_PUSH = 1.5;
     private static final long IMPULSE_TOLERANCE_TICKS = 30;
     private static final double DEFAULT_MOVEMENT_SPEED = 0.1;
+    private static final int PHASE_MINIMUM_FRAMES = 4;
+    private static final double PHASE_MINIMUM_TRAVEL = 1.0;
     private static final double COBWEB_MULTIPLIER = 0.25;
     private static final double COBWEB_SPEED_ALLOWANCE = 3.0;
     private static final double COBWEB_JUMP_ALLOWANCE = 0.2;
@@ -234,6 +236,7 @@ public final class MovementPacketProcessor {
                 && (data.predictedOnGround || MovementCheckSupport.serverGround(player, accepted))) {
             data.safeLocation = MovementCheckSupport.clientLocation(player, accepted, rotation);
         }
+        inspectPhase(event, player, data, accepted);
         captureMovementWorldFrame(player, data, tick, accepted, rotation);
         if (data.inputSequence % 100 == 0) {
             data.clientWorld.pruneAround(accepted.getX(), accepted.getY(), accepted.getZ(), 64, 32);
@@ -363,6 +366,34 @@ public final class MovementPacketProcessor {
         data.penetratedLastFrame = false;
         data.stuckInCollider = false;
         data.resetFall();
+    }
+
+    /** Flags a player travelling through full solid blocks. */
+    private void inspectPhase(PacketReceiveEvent event, Player player, PlayerData data,
+                              Vector3f accepted) {
+        if (player.isSpectator() || data.inGrace() || data.hasPendingTeleport()
+                || data.hasMovementCorrection() || data.stuckInCollider
+                || !MovementCheckSupport.insideFullCube(player, accepted)) {
+            data.phaseFrames = 0;
+            data.phaseEntry = null;
+            return;
+        }
+
+        if (data.phaseEntry == null) {
+            data.phaseEntry = new Vec3(accepted.getX(), accepted.getY(), accepted.getZ());
+        }
+        data.phaseFrames++;
+        double dx = accepted.getX() - data.phaseEntry.x();
+        double dz = accepted.getZ() - data.phaseEntry.z();
+        double travelled = Math.sqrt(dx * dx + dz * dz);
+        if (data.phaseFrames < PHASE_MINIMUM_FRAMES || travelled < PHASE_MINIMUM_TRAVEL) {
+            return;
+        }
+
+        data.phaseFrames = 0;
+        data.phaseEntry = null;
+        violations.fail(event, player, data, CheckType.PHASE_A, 3,
+                "travelled=" + String.format("%.3f", travelled) + " inside solid blocks", true, true);
     }
 
     private void ensureMovementWorldFrame(Player player, PlayerData data, long tick,
