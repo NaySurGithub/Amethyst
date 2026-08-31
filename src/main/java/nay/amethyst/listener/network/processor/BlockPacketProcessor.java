@@ -173,6 +173,10 @@ public final class BlockPacketProcessor {
         }
         data.earlyBreakAttempts = 0;
         data.earlyBreakWindowNanos = 0;
+        Block air = Block.get(BlockID.AIR, player.getLevel(),
+                position.getX(), position.getY(), position.getZ());
+        data.clientWorld.applyLocal(position.getX(), position.getY(), position.getZ(), 0,
+                BlockFrame.capture(air));
         data.resetBreak();
     }
 

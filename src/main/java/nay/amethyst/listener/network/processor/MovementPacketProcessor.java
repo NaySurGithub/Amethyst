@@ -175,6 +175,9 @@ public final class MovementPacketProcessor {
         } else {
             data.motion.ready(true);
             ensureMovementWorldFrame(player, data, tick, clientPosition, rotation);
+            if (data.history.worldChanged(data.clientWorld)) {
+                captureMovementWorldFrame(player, data, tick, clientPosition, rotation);
+            }
             var worldFrame = data.history.latest();
             if (worldFrame == null) {
                 acceptPipelineState(data, clientPosition, delta, player.isOnGround());

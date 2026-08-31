@@ -88,6 +88,11 @@ public final class CompensatedHistory {
         return frames.isEmpty() ? null : frames.lastEntry().getValue();
     }
 
+    /** Whether acknowledged client-side block state changed since the cached world snapshot. */
+    public synchronized boolean worldChanged(ClientWorldTracker clientWorld) {
+        return clientWorld.revision() != cachedWorldRevision;
+    }
+
     public synchronized List<WorldFrame> recent(int count) {
         if (count <= 0 || frames.isEmpty()) return List.of();
         return frames.descendingMap().values().stream().limit(count).toList();
