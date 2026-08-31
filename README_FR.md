@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>💎 Amethyst 🛡️</h1>
+  <img src="./icon.png" alt="Logo Amethyst" width="180">
   <p>Un anti-cheat par prédiction pour PowerNukkitX</p>
   <p><a href="README.md">🇬🇧 Read in English</a></p>
 
