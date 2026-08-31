@@ -1042,6 +1042,9 @@ public final class PacketListener implements Listener {
         }
         double vl = data.violations.merge(check.id(), amount, Double::sum);
         long now = System.nanoTime();
+        if (check == CheckType.SIMULATION) {
+            data.exemptBreakReach(now);
+        }
         if (check == CheckType.AUTOCLICKER_A) {
             plugin.alert(player, check, vl, detail);
         } else if (now - data.lastAlertNanos > 300_000_000L) {

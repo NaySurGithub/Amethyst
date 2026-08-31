@@ -110,7 +110,7 @@ public final class BlockPacketProcessor {
                     blockPosition.getZ() + 0.5));
             double maximumReach = Math.min(7.0,
                     Math.max(1.0, plugin.settings().blocksMaxReach()));
-            if (reach > maximumReach && !correcting) {
+            if (reach > maximumReach && !correcting && !data.breakReachExempt(now)) {
                 violations.fail(event, player, data, CheckType.BREAK_REACH, 1,
                         "distance=" + NetworkCheckSupport.format(reach), true, false);
                 return;

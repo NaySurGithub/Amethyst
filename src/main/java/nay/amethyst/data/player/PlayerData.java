@@ -25,6 +25,7 @@ public final class PlayerData {
     private static final int CLICK_WINDOW_TICKS = 20;
     private static final long PROTOCOL_GRACE_MILLIS = 3000;
     private static final long VELOCITY_GRACE_MILLIS = 1500;
+    private static final long BREAK_REACH_EXEMPT_NANOS = 1_000_000_000L;
     public static final long SPEAR_LUNGE_SEQUENCE = Long.MAX_VALUE - 1;
     public static final long SERVER_MOTION_SEQUENCE = Long.MAX_VALUE - 2;
     public static final long SERVER_MOTION_STOP_SEQUENCE = Long.MAX_VALUE - 3;
@@ -35,6 +36,7 @@ public final class PlayerData {
     private boolean movementCorrectionPending;
     private long movementCorrectionDeadline;
     private boolean simulationCorrectionEpisode;
+    private long breakReachExemptUntilNanos;
     public int simulationMismatchFrames;
     public int phaseFrames;
     public Vec3 phaseEntry;
@@ -209,6 +211,15 @@ public final class PlayerData {
         movementCorrectionDeadline = inputSequence + 60;
         gracePeriods.grant(GraceReason.SERVER_CORRECTION, PROTOCOL_GRACE_MILLIS);
         return true;
+    }
+
+    /** Replaces, rather than extends, the one-second BreakReach exemption. */
+    public synchronized void exemptBreakReach(long nowNanos) {
+        breakReachExemptUntilNanos = nowNanos + BREAK_REACH_EXEMPT_NANOS;
+    }
+
+    public synchronized boolean breakReachExempt(long nowNanos) {
+        return nowNanos < breakReachExemptUntilNanos;
     }
 
     public synchronized boolean hasMovementCorrection() {
