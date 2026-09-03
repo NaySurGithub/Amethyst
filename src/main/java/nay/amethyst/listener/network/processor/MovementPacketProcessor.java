@@ -69,7 +69,6 @@ public final class MovementPacketProcessor {
     private static final int GLIDE_TAIL_TICKS = 20;
     private static final int SLEEP_GRACE_TICKS = 100;
     private static final double MAX_SIMULATED_MOVEMENT_SPEED = 0.5;
-    private static final int GROUND_SPOOF_TICKS = 18;
     private static final int AIR_STALL_TICKS = 6;
     private static final double AIR_STALL_MAXIMUM_DELTA = 0.025;
     private static final double AIR_STALL_MINIMUM_FALL_SPEED = -0.12;
@@ -198,7 +197,6 @@ public final class MovementPacketProcessor {
                 if (data.motion.wearingElytra() && !result.onGround()) {
                     data.lastGlideTick = data.lastTick;
                 }
-                inspectGroundSpoof(event, player, data, clientPosition);
                 if (inspectAirStall(event, player, data, result, observedMovement)) {
                     return;
                 }
@@ -441,28 +439,6 @@ public final class MovementPacketProcessor {
                         + " client=" + result.clientPosition()
                         + " predicted=" + result.authoritativePosition()
                         + " tick=" + result.tick());
-    }
-
-    private void inspectGroundSpoof(PacketReceiveEvent event, Player player, PlayerData data,
-                                    Vector3f position) {
-        if (data.inGrace() || player.getAllowFlight() || player.isFlying()
-                || player.isSpectator() || player.isCreative() || player.getRiding() != null
-                || !data.motion.client().verticalCollision()
-                || data.motion.wearingElytra()
-                || MovementCheckSupport.serverGround(player, position)
-                || MovementCheckSupport.nearPartialBlock(player, position)) {
-            data.groundSpoofBuffer = 0;
-            return;
-        }
-
-        data.groundSpoofBuffer++;
-        if (data.groundSpoofBuffer < GROUND_SPOOF_TICKS) {
-            return;
-        }
-
-        data.groundSpoofBuffer = 0;
-        violations.fail(event, player, data, CheckType.GROUND_SPOOF_A, 1,
-                "position=" + position, false, false);
     }
 
     private boolean inspectAirStall(PacketReceiveEvent event, Player player, PlayerData data,

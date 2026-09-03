@@ -90,7 +90,6 @@ acknowledgement-gated, so the simulation only adopts a change once the client ha
 | `Timer` | More client frames than ticks elapsed, which is a client running its own simulation fast. |
 | `Vehicle-A` | Boat, minecart or mount movement that did not match its own prediction. The vehicle is sent back, not its rider. |
 | `NoFall-A` | Fall damage that did not match the simulated fall. |
-| `GroundSpoof-A` | The client claimed a vertical collision with nothing under it. |
 | `Phase-A` | Ground covered while inside full solid blocks. Blocks with their own collision shape are ignored, and arriving inside one is not enough on its own. |
 | `Sprint-A…C` | A sprint state the client cannot legitimately hold. |
 | `Elytra-A…B` | A glide started in conditions the client refuses. |

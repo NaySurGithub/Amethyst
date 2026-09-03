@@ -90,7 +90,6 @@ le client l'a réellement vu.
 | `Vehicle-A` | Un mouvement de bateau, wagonnet ou monture qui n'a pas suivi sa propre prédiction. C'est le véhicule qui est renvoyé, pas son passager. |
 | `NoFall-A` | Des dégâts de chute qui ne correspondent pas à la chute simulée. |
 | `Phase-A` | Distance parcourue à l'intérieur de blocs pleins. Les blocs ayant leur propre forme de collision sont ignorés, et se retrouver dans un bloc ne suffit pas à déclencher. |
-| `GroundSpoof-A` | Le client annonce une collision verticale avec rien sous lui. |
 | `Sprint-A…C` | Un état de sprint que le client ne peut pas légitimement tenir. |
 | `Elytra-A…B` | Un vol plané démarré dans des conditions que le client refuse. |
 | `KillAura-A` | Cible ou séquence d'attaque invalide. |

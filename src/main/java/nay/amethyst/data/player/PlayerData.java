@@ -54,7 +54,6 @@ public final class PlayerData {
     public int timerWarmup;
     public int timerInputs;
     public int timerTicks;
-    public int groundSpoofBuffer;
     public int airStallBuffer;
     public int cobwebBuffer;
     public int sprintFoodBuffer;
@@ -492,7 +491,6 @@ public final class PlayerData {
         timerWarmup = 0;
         timerInputs = 0;
         timerTicks = 0;
-        groundSpoofBuffer = 0;
         airStallBuffer = 0;
         cobwebBuffer = 0;
         sprintFoodBuffer = 0;

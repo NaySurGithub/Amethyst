@@ -32,7 +32,6 @@ public enum CheckType {
     PLACE_REACH_A("PlaceReach-A", "A block was placed beyond the allowed reach."),
     FAST_BREAK_A("FastBreak-A", "A block was destroyed before its calculated break time."),
     SCAFFOLD_A("Scaffold-A", "The click vector was zero during an initial player-input placement."),
-    GROUND_SPOOF_A("GroundSpoof-A", "The client reported standing on nothing.", true),
     PHASE_A("Phase-A", "The player was inside a full solid block.", true),
     FAST_USE_A("FastUse-A", "An item was consumed faster than it can be used."),
     BEDROCK_TOOL_A("BedrockTool-A", "The client identity matches a known tool.", true),

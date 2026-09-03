@@ -126,34 +126,6 @@ public final class MovementCheckSupport {
                 && Math.abs(box.maxZ() - (z + 1.0)) <= CUBE_EPSILON;
     }
 
-    /** Whether anything under the player has a collision box smaller than a full cube. */
-    public static boolean nearPartialBlock(Player player, Vector3f position) {
-        double half = player.getWidth() / 2.0;
-        double feet = position.getY() - player.getBaseOffset();
-        int minimumX = floor((float) (position.getX() - half));
-        int maximumX = floor((float) (position.getX() + half));
-        int minimumY = floor((float) (feet - 0.35));
-        int maximumY = floor((float) (feet + 0.02));
-        int minimumZ = floor((float) (position.getZ() - half));
-        int maximumZ = floor((float) (position.getZ() + half));
-        for (int x = minimumX; x <= maximumX; x++) {
-            for (int y = minimumY; y <= maximumY; y++) {
-                for (int z = minimumZ; z <= maximumZ; z++) {
-                    Block block = player.getLevel().getBlock(x, y, z, 0);
-                    if (block == null || block.isAir()) continue;
-                    AxisAlignedBB box = block.getBoundingBox();
-                    if (box == null) continue;
-                    if (box.getMaxY() - box.getMinY() < 1.0 - 1.0E-6
-                            || box.getMaxX() - box.getMinX() < 1.0 - 1.0E-6
-                            || box.getMaxZ() - box.getMinZ() < 1.0 - 1.0E-6) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
     public static boolean insideCobweb(Player player, Vector3f position) {
         double half = player.getWidth() / 2.0;
         double feet = position.getY() - player.getBaseOffset();
