@@ -474,7 +474,8 @@ public final class MovementPacketProcessor {
                 || !result.anchored() || result.inFluid() || result.onGround()
                 || data.motion.riptideActive() || data.motion.gliding()
                 || data.motion.wearingElytra() || player.getAllowFlight()
-                || player.isFlying() || player.isSpectator() || player.getRiding() != null;
+                || player.isFlying() || player.isSpectator() || player.isCreative()
+                || player.getRiding() != null;
         boolean stalled = !exempt
                 && Math.abs(observedMovement.y()) <= AIR_STALL_MAXIMUM_DELTA
                 && result.authoritativeVelocity().y() <= AIR_STALL_MINIMUM_FALL_SPEED
@@ -500,7 +501,7 @@ public final class MovementPacketProcessor {
     private void inspectCobweb(PacketReceiveEvent event, Player player, PlayerData data,
                                Vector3f position, Vec3 movement) {
         if (data.inGrace() || player.getAllowFlight() || player.isFlying() || player.isSpectator()
-                || player.getRiding() != null || data.hasMovementCorrection()
+                || player.isCreative() || player.getRiding() != null || data.hasMovementCorrection()
                 || data.hasPendingTeleport()
                 || !MovementCheckSupport.insideCobweb(player, position)) {
             data.cobwebBuffer = 0;
@@ -532,7 +533,7 @@ public final class MovementPacketProcessor {
         data.wasSprinting = sprinting;
 
         if (data.inGrace() || player.getAllowFlight() || player.isFlying() || player.isSpectator()
-                || player.getRiding() != null || !sprinting) {
+                || player.isCreative() || player.getRiding() != null || !sprinting) {
             data.sprintFoodBuffer = 0;
             data.sprintUseBuffer = 0;
             return;
