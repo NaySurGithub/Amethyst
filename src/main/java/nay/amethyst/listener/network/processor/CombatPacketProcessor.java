@@ -60,6 +60,10 @@ public final class CombatPacketProcessor {
             return;
         }
 
+        if (player.isCreative() || player.isSpectator()) {
+            return;
+        }
+
         var settings = plugin.settings();
         double expansion = Math.max(0, settings.combatBboxExpansion());
         double leniency = Math.max(0, settings.combatReachLeniency());
