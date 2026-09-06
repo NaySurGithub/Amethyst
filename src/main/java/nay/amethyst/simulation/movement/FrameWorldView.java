@@ -13,6 +13,9 @@ import java.util.Map;
 public final class FrameWorldView implements MovementWorldView {
     private static final float SOLID_ENTITY_RANGE = 1.5f;
 
+    private static final float HORIZONTAL_INSET = 0.001f;
+    private static final float VERTICAL_INSET = 0.40099999f;
+
     private final WorldFrame frame;
     private final Map<BlockFrame, MovementBlockView> views = new IdentityHashMap<>();
 
@@ -84,6 +87,11 @@ public final class FrameWorldView implements MovementWorldView {
         return state;
     }
 
+    private static int floor(float value) {
+        int truncated = (int) value;
+        return value < truncated ? truncated - 1 : truncated;
+    }
+
     private FluidState computeFluidState(FloatBox area) {
         boolean water = false;
         boolean lava = false;
@@ -94,18 +102,29 @@ public final class FrameWorldView implements MovementWorldView {
         int bubbleDirection = 0;
         boolean bubbleSurface = false;
 
+        float minX = area.minX() + HORIZONTAL_INSET;
+        float maxX = area.maxX() - HORIZONTAL_INSET;
+        float minZ = area.minZ() + HORIZONTAL_INSET;
+        float maxZ = area.maxZ() - HORIZONTAL_INSET;
+        float minY = area.minY() + VERTICAL_INSET;
+        float maxY = area.maxY() - VERTICAL_INSET;
+        if (minY > maxY) {
+            minY = (area.minY() + area.maxY()) * 0.5f;
+            maxY = minY;
+        }
+
         for (BlockPos position : frame.index().fluids()) {
             BlockFrame block = frame.blocks().get(position);
             if (block == null) {
                 continue;
             }
 
-            float top = position.y() + (float) block.fluidHeight();
-            if (top <= area.minY() || position.y() >= area.maxY()
-                    || position.x() + 1 <= area.minX() || position.x() >= area.maxX()
-                    || position.z() + 1 <= area.minZ() || position.z() >= area.maxZ()) {
+            if (position.x() < floor(minX) || position.x() > floor(maxX)
+                    || position.y() < floor(minY) || position.y() > floor(maxY)
+                    || position.z() < floor(minZ) || position.z() > floor(maxZ)) {
                 continue;
             }
+            float top = position.y() + (float) block.fluidHeight();
 
             water |= block.water();
             lava |= block.lava();

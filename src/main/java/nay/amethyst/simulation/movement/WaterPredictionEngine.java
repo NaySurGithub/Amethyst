@@ -9,7 +9,7 @@ public final class WaterPredictionEngine extends PredictionEngine {
     private static final float DEPTH_STRIDER_DRAG = 0.54600006f;
     private static final float DEPTH_STRIDER_STEP = 0.33333334f;
     private static final float ASCENT = 0.04f;
-    private static final float ASCENT_MINIMUM_SUBMERSION = 0.4f;
+    private static final float GRAVITY = 0.02f;
     private static final float PUSH = 0.014f;
     private static final float LEDGE_CLIMB = 0.3f;
     private static final float BUBBLE_DOWNWARD_MAX = -0.3f;
@@ -34,8 +34,12 @@ public final class WaterPredictionEngine extends PredictionEngine {
         applyKnockback();
         applyFluidPush(fluid, PUSH);
 
-        if ((state.pressingJump() || state.autoJumpingInWater())
-                && fluid.submersion() > ASCENT_MINIMUM_SUBMERSION) {
+        if (state.jumping() && state.onGround() && state.jumpDelay() <= 0) {
+            FloatVector velocity = state.velocity();
+            state.velocity(new FloatVector(velocity.x(),
+                    state.jumpHeight() * jumpPreventionMultiplier(), velocity.z()));
+            state.jumpDelay(MovementConstants.JUMP_DELAY_TICKS);
+        } else if (state.pressingJump() || state.autoJumpingInWater()) {
             state.velocity(state.velocity().add(0.0f, ASCENT, 0.0f));
         }
 
@@ -83,8 +87,7 @@ public final class WaterPredictionEngine extends PredictionEngine {
             return;
         }
         if (state.gravity() != 0.0f && !state.swimming()) {
-            state.velocity(new FloatVector(velocity.x(),
-                    velocity.y() - state.gravity() / 16.0f, velocity.z()));
+            state.velocity(new FloatVector(velocity.x(), velocity.y() - GRAVITY, velocity.z()));
         }
     }
 

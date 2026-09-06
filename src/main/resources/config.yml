@@ -10,6 +10,20 @@ disabled-checks: []
 updates:
   check: true
 setback-violations: 2.0
+# Containers a player has no line of sight to are sent as the block around them, so a client that
+# draws through terrain has nothing to draw. They come back before the player can see them.
+conceal-containers:
+  enabled: true
+  # How far containers are considered, in blocks.
+  radius: 48
+  # Containers closer than this are never touched. Swapping one under a player's feet would give
+  # their client a block of the wrong height, and seeing through terrain that close is pointless.
+  min-distance: 3
+  # How far to the side of the player, in blocks, the sight line is also tested from, so a container
+  # is restored a step before it comes into view rather than as it does.
+  margin: 0.5
+  # Ticks between two passes.
+  interval: 4
 max-packet-actions: 12
 inventory-move:
   input-threshold: 0.075

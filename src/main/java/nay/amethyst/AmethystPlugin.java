@@ -7,6 +7,7 @@ import nay.amethyst.config.AmethystSettings;
 import nay.amethyst.diagnostics.AlertFormatter;
 import nay.amethyst.listener.network.PacketListener;
 import nay.amethyst.network.session.MovementSessionRegistry;
+import nay.amethyst.protect.ContainerConcealer;
 import nay.amethyst.update.VersionChecker;
 import org.powernukkitx.Player;
 import org.powernukkitx.command.Command;
@@ -30,6 +31,7 @@ public final class AmethystPlugin extends PluginBase {
     private boolean alertsEnabled;
     private volatile AmethystSettings settings;
     private final AlertFormatter alertFormatter = new AlertFormatter();
+    private final ContainerConcealer concealer = new ContainerConcealer();
 
     private static AmethystPlugin instance;
 
@@ -52,6 +54,8 @@ public final class AmethystPlugin extends PluginBase {
         movementSessions.setTimelineProvider(listener::networkTimeline);
         registerEvents(listener);
         getServer().getScheduler().scheduleRepeatingTask(this, listener::onServerTick, 1);
+        getServer().getScheduler().scheduleRepeatingTask(this, this::concealContainers,
+                Math.max(1, settings.concealInterval()));
         getLogger().info("Amethyst is enabled don't worry about hackers");
         if (getConfig().getBoolean("updates.check", true)) VersionChecker.checkAsync(this);
     }
@@ -61,6 +65,10 @@ public final class AmethystPlugin extends PluginBase {
         if (movementSessions != null) {
             movementSessions.shutdown(getServer().getOnlinePlayers().values());
         }
+        for (Player player : getServer().getOnlinePlayers().values()) {
+            concealer.reveal(player);
+        }
+        concealer.clear();
         players.clear();
         instance = null;
     }
@@ -69,6 +77,24 @@ public final class AmethystPlugin extends PluginBase {
         reloadConfig();
         alertsEnabled = getConfig().getBoolean("alerts", true);
         settings = AmethystSettings.load(getConfig());
+    }
+
+    public ContainerConcealer concealer() {
+        return concealer;
+    }
+
+    private void concealContainers() {
+        AmethystSettings current = settings;
+        if (current == null || !current.concealContainers()) {
+            return;
+        }
+        for (Player player : getServer().getOnlinePlayers().values()) {
+            if ((player.isSurvival() || player.isAdventure()) && !player.hasPermission("amethyst.bypass")) {
+                concealer.refresh(player, current);
+            } else {
+                concealer.reveal(player);
+            }
+        }
     }
 
     public AmethystSettings settings() {

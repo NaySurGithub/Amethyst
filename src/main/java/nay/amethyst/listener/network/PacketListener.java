@@ -262,6 +262,7 @@ public final class PacketListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
+        plugin.concealer().reveal(event.getPlayer());
         movementSessions.restore(event.getPlayer());
         players.remove(event.getPlayer().getUniqueId());
     }
@@ -330,6 +331,8 @@ public final class PacketListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockPlace(BlockPlaceEvent event) {
+        plugin.concealer().invalidate(event.getBlock().getLevel(), event.getBlock().getFloorX(),
+                event.getBlock().getFloorZ());
         blockProcessor.handlePlace(event);
     }
 
@@ -340,6 +343,8 @@ public final class PacketListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBlockBreak(BlockBreakEvent event) {
+        plugin.concealer().invalidate(event.getBlock().getLevel(), event.getBlock().getFloorX(),
+                event.getBlock().getFloorZ());
         blockProcessor.handleBreak(event);
     }
 
@@ -470,6 +475,9 @@ public final class PacketListener implements Listener {
             data.lastChestTakeNanos = 0;
             return;
         }
+        if (event.getPacket() instanceof LevelChunkPacket chunkPacket) {
+            plugin.concealer().forgetChunk(player, chunkPacket.getChunkX(), chunkPacket.getChunkZ());
+        }
         if (event.getPacket() instanceof LevelChunkPacket
                 || event.getPacket() instanceof SubChunkPacket) {
             sendAcknowledgmentAfter(event, player, data, AcknowledgmentType.INITIALIZATION,
@@ -574,6 +582,9 @@ public final class PacketListener implements Listener {
             return;
         }
         if (event.getPacket() instanceof UpdateBlockPacket packet) {
+            if (plugin.concealer().conceals(player, packet.getBlockPosition())) {
+                return;
+            }
             queueBlockUpdate(player, data, packet.getBlockPosition(), packet.getLayer(),
                     packet.getDefinition() == null ? -1 : packet.getDefinition().getRuntimeId());
             flushBlockUpdatesAfter(event, player, data);

@@ -30,6 +30,11 @@ public record AmethystSettings(
         double blocksMaxReach,
         long blocksBreakLeniencyMs,
         double setbackViolations,
+        boolean concealContainers,
+        int concealRadius,
+        double concealMinDistance,
+        double concealMargin,
+        int concealInterval,
         boolean devLogs,
         Set<String> disabledChecks
 ) {
@@ -62,6 +67,11 @@ public record AmethystSettings(
                 config.getDouble("blocks.max-reach", 7),
                 config.getLong("blocks.break-leniency-ms", 75),
                 config.getDouble("setback-violations", 2.0),
+                config.getBoolean("conceal-containers.enabled", true),
+                config.getInt("conceal-containers.radius", 48),
+                config.getDouble("conceal-containers.min-distance", 3),
+                config.getDouble("conceal-containers.margin", 0.5),
+                config.getInt("conceal-containers.interval", 4),
                 config.getBoolean("dev-logs", false),
                 disabledChecks(config));
     }
