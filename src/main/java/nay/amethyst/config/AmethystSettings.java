@@ -71,7 +71,7 @@ public record AmethystSettings(
                 config.getDouble("blocks.max-reach", 7),
                 config.getLong("blocks.break-leniency-ms", 75),
                 config.getDouble("setback-violations", 2.0),
-                config.getBoolean("conceal-containers.enabled", true),
+                config.getBoolean("conceal-containers.enabled", false),
                 config.getInt("conceal-containers.radius", 48),
                 config.getDouble("conceal-containers.min-distance", 3),
                 config.getDouble("conceal-containers.margin", 0.5),
