@@ -13,7 +13,7 @@ setback-violations: 2.0
 # Containers a player has no line of sight to are sent as the block around them, so a client that
 # draws through terrain has nothing to draw. They come back before the player can see them.
 conceal-containers:
-  enabled: true
+  enabled: false
   # How far containers are considered, in blocks.
   radius: 48
   #What containers shouldn't be used by this check.
