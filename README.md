@@ -121,6 +121,21 @@ Situations the game itself makes unpredictable - pistons, a player pushed inside
 after a teleport - suspend the movement check rather than guess at it. They are handled conservatively so that
 a legitimate player is never punished for them.
 
+## 🫥 Container concealment
+
+X-ray and ESP draw through terrain. No packet the server receives betrays them, so nothing can be flagged:
+the only answer is to stop sending what the client should not be able to see.
+
+Every few ticks, each container within range is tested for line of sight from the player's eye. A container
+walled in on every side is answered from its six neighbours alone; otherwise a ray is traced to each exposed
+face turned toward the player. What the player cannot see is sent as the block that surrounds it - deepslate
+in a deepslate wall - or as air where nothing surrounds it, so that no lone block marks the spot. The real
+block comes back before the sight line opens, judged from eye positions set aside by a margin.
+
+Containers within a few blocks are never touched, so a client is never given a block of the wrong height under
+its feet. Creative and spectator are exempt, and everything is restored when the player leaves or the server
+stops.
+
 ## 🔌 For developers
 
 `PlayerViolationEvent` fires on every flag, before the alert is sent. It carries the player, the check, the
@@ -156,6 +171,11 @@ another plugin exempts a case Amethyst cannot know about.
 | `inventory-move.input-threshold` | Minimum directional input, excluding controller drift. |
 | `inventory-move.request-window-ms` | Maximum delay between an item action and movement confirmation. |
 | `inventory-move.buffer-threshold` | Consecutive suspicious inventory actions required. |
+| `conceal-containers.enabled` | Hides containers the player has no line of sight to. |
+| `conceal-containers.radius` | How far containers are considered, in blocks. |
+| `conceal-containers.min-distance` | Containers closer than this are never touched. |
+| `conceal-containers.margin` | How far to the side the sight line is also tested from. |
+| `conceal-containers.interval` | Ticks between two passes. |
 
 `prediction.tolerance` and `prediction.buffer-threshold` are the two worth tuning.
 

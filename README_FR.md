@@ -119,6 +119,22 @@ Les situations que le jeu lui-même rend imprévisibles - pistons, riptide, un j
 l'instant qui suit un téléport - suspendent la vérification du mouvement au lieu de la deviner. Elles sont
 traitées de façon conservatrice, pour qu'un joueur légitime n'en soit jamais puni.
 
+## 🫥 Masquage des conteneurs
+
+Le X-ray et l'ESP dessinent à travers le terrain. Aucun paquet reçu par le serveur ne les trahit, donc rien ne
+peut être flag : la seule réponse est de ne plus envoyer ce que le client ne devrait pas pouvoir voir.
+
+Toutes les quelques ticks, chaque conteneur à portée est testé en ligne de vue depuis l'œil du joueur. Un
+conteneur muré de tous les côtés est tranché par ses six voisins seuls ; sinon un rayon est tracé vers chaque
+face exposée tournée vers le joueur. Ce que le joueur ne peut pas voir est envoyé comme le bloc qui l'entoure -
+de la pierre profonde dans une paroi de pierre profonde - ou comme de l'air quand rien ne l'entoure, pour
+qu'aucun bloc isolé ne signale l'endroit. Le vrai bloc revient avant que la ligne de vue ne s'ouvre, jugé
+depuis des positions d'œil écartées d'une marge.
+
+Les conteneurs situés à quelques blocs ne sont jamais touchés, pour ne jamais donner au client un bloc de la
+mauvaise hauteur sous ses pieds. Le créatif et le spectateur sont exemptés, et tout est restauré quand le
+joueur part ou que le serveur s'arrête.
+
 ## 🔌 Pour les développeurs
 
 `PlayerViolationEvent` est déclenché à chaque flag, avant l'envoi de l'alerte. Il porte le joueur, le check, le
@@ -154,6 +170,11 @@ autre plugin exempte un cas qu'Amethyst ne peut pas connaître.
 | `inventory-move.input-threshold` | Entrée directionnelle minimale, dérive de manette exclue. |
 | `inventory-move.request-window-ms` | Délai maximal entre une action d'objet et la confirmation du mouvement. |
 | `inventory-move.buffer-threshold` | Actions d'inventaire suspectes consécutives nécessaires. |
+| `conceal-containers.enabled` | Masque les conteneurs auxquels le joueur n'a pas de ligne de vue. |
+| `conceal-containers.radius` | Distance à laquelle les conteneurs sont considérés, en blocs. |
+| `conceal-containers.min-distance` | Les conteneurs plus proches que cela ne sont jamais touchés. |
+| `conceal-containers.margin` | Écart latéral depuis lequel la ligne de vue est aussi testée. |
+| `conceal-containers.interval` | Ticks entre deux passes. |
 
 `prediction.tolerance` et `prediction.buffer-threshold` sont les deux qui méritent d'être ajustés.
 
