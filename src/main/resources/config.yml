@@ -3,7 +3,7 @@ alerts: true
 # positive, noisy for everyday use.
 dev-logs: false
 # Check ids to turn off entirely, as written in the alerts. Example:
-# disabled-checks:
+# disabledCheck-checks:
 #   - Autoclicker-A
 #   - Timer
 disabled-checks: []
@@ -16,6 +16,8 @@ conceal-containers:
   enabled: true
   # How far containers are considered, in blocks.
   radius: 48
+  #What containers shouldn't be used by this check.
+  disabled-containers: ["minecraft:beacon"]
   # Containers closer than this are never touched. Swapping one under a player's feet would give
   # their client a block of the wrong height, and seeing through terrain that close is pointless.
   min-distance: 3

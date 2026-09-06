@@ -247,7 +247,7 @@ public final class MovementPacketProcessor {
     public void handleEarlyMovementRejection(Player player, MovementPreValidationResult result) {
         if (result.check() == null || !player.isOnline()
                 || player.hasPermission("amethyst.bypass")
-                || plugin.settings().disabled(result.check().id())) return;
+                || plugin.settings().disabledCheck(result.check().id())) return;
         PlayerData data = players.get(player.getUniqueId());
         if (data == null || !data.joined) return;
         data.movementPacketDropped = true;
@@ -443,7 +443,7 @@ public final class MovementPacketProcessor {
 
     private boolean inspectAirStall(PacketReceiveEvent event, Player player, PlayerData data,
                                     MovementPipelineResult result, Vec3 observedMovement) {
-        boolean exempt = plugin.settings().disabled(CheckType.FLY_A.id())
+        boolean exempt = plugin.settings().disabledCheck(CheckType.FLY_A.id())
                 || data.inGrace() || data.hasMovementCorrection()
                 || data.hasPendingTeleport() || data.nearServerMotionTick
                 || result.ticksSinceImpulse() < IMPULSE_TOLERANCE_TICKS

@@ -9,7 +9,6 @@ import org.powernukkitx.block.BlockEntityHolder;
 import org.powernukkitx.block.BlockID;
 import org.powernukkitx.block.BlockState;
 import org.powernukkitx.blockentity.BlockEntity;
-import org.powernukkitx.blockentity.BlockEntityBeacon;
 import org.powernukkitx.blockentity.BlockEntityInventoryHolder;
 import org.powernukkitx.level.Level;
 import org.powernukkitx.level.format.IChunk;
@@ -40,7 +39,7 @@ public final class ContainerConcealer {
 
     /**
      * The five points aimed at on each face, as offsets inside the block: its middle and its four
-     * corners, pulled off the surface so a ray does not graze the neighbour. Held flat, three
+     * corners, pulled off the surface so a ray does not graze the neighbor. Held flat, three
      * numbers per point, to keep the sight test free of allocation.
      */
     private static final double[][] FACE_SAMPLES = buildFaceSamples();
@@ -59,7 +58,7 @@ public final class ContainerConcealer {
 
     /**
      * Reconsiders every container around {@code player}. Cheap on the common case: a container
-     * walled in on all six sides is answered from its neighbours alone, without casting a ray.
+     * walled in on all six sides is answered from its neighbors alone, without casting a ray.
      */
     public void refresh(Player player, AmethystSettings settings) {
         if (player == null || !player.isOnline()) {
@@ -96,6 +95,9 @@ public final class ContainerConcealer {
             int x = unpackX(key);
             int y = unpackY(key);
             int z = unpackZ(key);
+            if (settings.disabledContainers(level.getBlock(x, y, z, false).getId())) {
+                continue;
+            }
             seen.add(key);
             if (withinRange(player, x, y, z, nearSquared)) {
                 if (view.concealed.remove(key)) {
@@ -111,6 +113,7 @@ public final class ContainerConcealer {
                 sendReal(player, level, x, y, z);
             }
         }
+
 
         view.concealed.removeIf(key -> {
             if (seen.contains(key)) {
@@ -209,7 +212,7 @@ public final class ContainerConcealer {
 
     /**
      * The containers of one chunk, remembered until something is built or broken there. Block
-     * entities move rarely, and walking the whole neighbourhood on every pass was most of the work.
+     * entities move rarely, and walking the whole neighborhood on every pass was most of the work.
      */
     private long[] chunkContainers(Level level, int chunkX, int chunkZ) {
         ChunkKey chunkKey = new ChunkKey(level.getId(), chunkX, chunkZ);
@@ -223,8 +226,10 @@ public final class ContainerConcealer {
         }
         LongSet found = new LongOpenHashSet();
         for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
-            if (blockEntity instanceof BlockEntityInventoryHolder && !blockEntity.closed
-                    && !(blockEntity instanceof BlockEntityBeacon)) {
+            if(blockEntity instanceof BlockEntityInventoryHolder && !blockEntity.closed) {
+
+
+
                 found.add(key(blockEntity.getFloorX(), blockEntity.getFloorY(), blockEntity.getFloorZ()));
             }
         }

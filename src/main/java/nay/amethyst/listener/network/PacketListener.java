@@ -103,7 +103,6 @@ import org.powernukkitx.event.player.PlayerBedLeaveEvent;
 import org.powernukkitx.event.server.PacketReceiveEvent;
 import org.powernukkitx.event.server.PacketSendEvent;
 import org.powernukkitx.level.Location;
-import org.powernukkitx.math.Vector3;
 import org.powernukkitx.item.ItemID;
 import org.powernukkitx.item.Item;
 import org.powernukkitx.item.ItemSpear;
@@ -1048,7 +1047,7 @@ public final class PacketListener implements Listener {
 
     private void fail(Cancellable event, Player player, PlayerData data, CheckType check,
                       double amount, String detail, boolean cancel, boolean setback) {
-        if (plugin.settings().disabled(check.id())) {
+        if (plugin.settings().disabledCheck(check.id())) {
             return;
         }
         double vl = data.violations.merge(check.id(), amount, Double::sum);

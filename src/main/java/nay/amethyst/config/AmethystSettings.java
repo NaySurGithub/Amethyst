@@ -36,10 +36,14 @@ public record AmethystSettings(
         double concealMargin,
         int concealInterval,
         boolean devLogs,
-        Set<String> disabledChecks
-) {
-    public boolean disabled(String checkId) {
+        Set<String> disabledChecks,
+        Set<String> disabledContainers) {
+    public boolean disabledCheck(String checkId) {
         return disabledChecks.contains(checkId.toLowerCase(Locale.ROOT));
+    }
+
+    public boolean disabledContainers(String blockId) {
+        return disabledContainers.contains(blockId.toLowerCase(Locale.ROOT));
     }
 
     public static AmethystSettings load(Config config) {
@@ -73,12 +77,23 @@ public record AmethystSettings(
                 config.getDouble("conceal-containers.margin", 0.5),
                 config.getInt("conceal-containers.interval", 4),
                 config.getBoolean("dev-logs", false),
-                disabledChecks(config));
+                disabledChecks(config),
+                disabledContainers(config));
     }
 
     private static Set<String> disabledChecks(Config config) {
         Set<String> disabled = new HashSet<>();
         for (String entry : config.getStringList("disabled-checks")) {
+            if (entry != null && !entry.isBlank()) {
+                disabled.add(entry.trim().toLowerCase(Locale.ROOT));
+            }
+        }
+        return Set.copyOf(disabled);
+    }
+
+    private static Set<String> disabledContainers(Config config) {
+        Set<String> disabled = new HashSet<>();
+        for (String entry : config.getStringList("conceal-containers.disabled-containers")) {
             if (entry != null && !entry.isBlank()) {
                 disabled.add(entry.trim().toLowerCase(Locale.ROOT));
             }
