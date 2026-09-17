@@ -1106,7 +1106,7 @@ public final class PacketListener implements Listener {
         }
         data.kickScheduled = true;
         plugin.getServer().getScheduler().scheduleTask(plugin, () -> {
-            if (player.isOnline()) player.kick(reason);
+            if (player.isOnline()) player.kick(reason, false);
         });
     }
 
