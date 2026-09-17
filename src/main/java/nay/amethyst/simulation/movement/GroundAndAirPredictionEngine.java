@@ -27,6 +27,7 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
         moveRelative(acceleration);
         applyJump();
         applyClimbable();
+        walkOnBlock(blockUnder);
 
         boolean cobweb = insideBlockNamed("web");
         boolean powderSnow = !cobweb && insideBlockNamed("powder_snow");
@@ -40,7 +41,6 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
 
         FloatVector oldVelocity = state.velocity();
         boolean oldOnGround = state.onGround();
-        float oldY = state.position().y();
         move();
 
         if (state.hasSupportingBlock()) {
@@ -57,9 +57,6 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
             }
         }
 
-        if (oldY == state.position().y()) {
-            walkOnBlock(blockUnder);
-        }
         state.movement(state.velocity());
         postCollisionMotion(oldVelocity, oldOnGround, blockUnder);
 
