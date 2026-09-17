@@ -29,9 +29,10 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
         applyClimbable();
 
         boolean cobweb = insideBlockNamed("web");
+        boolean powderSnow = !cobweb && insideBlockNamed("powder_snow");
         if (cobweb) {
             state.velocity(state.velocity().multiply(0.25f, 0.05f, 0.25f));
-        } else if (insideBlockNamed("powder_snow")) {
+        } else if (powderSnow) {
             state.velocity(state.velocity().multiply(0.9f, 1.5f, 0.9f));
         } else if (insideBlockNamed("sweet_berry_bush")) {
             state.velocity(state.velocity().multiply(0.8f, 0.75f, 0.8f));
@@ -66,7 +67,7 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
             state.jumpDelay(0);
         }
 
-        if (cobweb) {
+        if (cobweb || powderSnow) {
             state.velocity(FloatVector.ZERO);
         }
 
