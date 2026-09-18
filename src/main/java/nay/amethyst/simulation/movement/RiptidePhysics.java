@@ -1,8 +1,5 @@
 package nay.amethyst.simulation.movement;
 
-import org.powernukkitx.math.Vector3;
-
-/** Exact Riptide launch impulse used by Bedrock's TridentItem::releaseUsing. */
 public final class RiptidePhysics {
     public static final int MAX_SPIN_TICKS = 20;
     public static final int GROUND_STOP_DELAY_TICKS = 5;
@@ -16,7 +13,7 @@ public final class RiptidePhysics {
         return (level + 1.0) * 0.75;
     }
 
-    public static Vector3 impulse(float yaw, float pitch, int level) {
+    public static FloatVector impulse(float yaw, float pitch, int level) {
         float yawRadians = (float) (yaw * RADIANS);
         float pitchRadians = (float) (pitch * RADIANS);
         double horizontal = MovementConstants.cos(pitchRadians);
@@ -25,6 +22,6 @@ public final class RiptidePhysics {
         double z = MovementConstants.cos(yawRadians) * horizontal;
         double length = Math.sqrt(x * x + y * y + z * z);
         double scale = strength(level) / length;
-        return new Vector3(x * scale, y * scale, z * scale);
+        return new FloatVector((float) (x * scale), (float) (y * scale), (float) (z * scale));
     }
 }

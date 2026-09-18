@@ -932,9 +932,10 @@ public final class PacketListener implements Listener {
         }
 
         data.riptideUseStartTick = Long.MIN_VALUE;
-        Vector3 impulse = RiptidePhysics.impulse(yaw, pitch, level);
+        FloatVector impulse = RiptidePhysics.impulse(yaw, pitch, level);
         Vector3 current = data.predictedVelocity == null ? Vector3.ZERO : data.predictedVelocity;
-        Vector3 combined = data.motion.immobile() ? current : current.add(impulse);
+        Vector3 combined = data.motion.immobile() ? current
+                : current.add(impulse.x(), impulse.y(), impulse.z());
         data.setRiptideCandidates(List.of(combined), player.isOnGround());
     }
 
