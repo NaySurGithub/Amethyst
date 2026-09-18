@@ -114,9 +114,7 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
     }
 
     private void applyPowderSnowTraversal() {
-        MovementBlockView block = world.block(floor(state.position().x()),
-                floor(state.position().y()), floor(state.position().z()));
-        if (!block.named("powder_snow")) {
+        if (!insideBlockNamed("powder_snow")) {
             return;
         }
         FloatVector velocity = state.velocity();

@@ -150,6 +150,25 @@ final class GroundAndAirStuckBlockTest {
     }
 
     @Test
+    void powderSnow_besideTheColumnWithLeatherBootsAndJumpHeld_climbs() {
+        TestBlockWorld world = new TestBlockWorld();
+        for (int y = 8; y <= 14; y++) {
+            world.put(1, y, 0, TestBlockWorld.POWDER_SNOW);
+        }
+        AuthoritativeMotionState state = state(new FloatVector(0.9f, 10.0f, 0.5f), false);
+        state.wearingLeatherBoots(true);
+        state.updateInput(MovementInputFrame.builder()
+                .position(new FloatVector(0.9f, 10.0f + MovementConstants.PLAYER_HEIGHT_OFFSET, 0.5f))
+                .rotation(FloatVector.ZERO)
+                .flag(MovementInputFlag.JUMPING)
+                .build());
+
+        tick(state, world);
+
+        assertEquals(10.0f + 0.2f * 1.5f, state.position().y(), DELTA);
+    }
+
+    @Test
     void powderSnow_withoutLeatherBoots_jumpHeldDoesNotClimb() {
         TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.POWDER_SNOW);
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
