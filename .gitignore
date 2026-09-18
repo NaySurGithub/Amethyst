@@ -22,6 +22,11 @@
 !build.gradle.kts
 !settings.gradle.kts
 
+!amethyst-simulation/
+!amethyst-simulation/build.gradle.kts
+!amethyst-simulation/src/
+!amethyst-simulation/src/**
+
 !gradle/
 !gradle/wrapper/
 !gradle/wrapper/**
