@@ -182,7 +182,7 @@ If you need to tune anything, start with `prediction.tolerance` and `prediction.
 1. Set `dev-logs: true`. Without it, an alert only names the check, which cannot be investigated.
 2. Open an [issue](https://github.com/NaySurGithub/Amethyst/issues) with:
    - the unmodified alert line;
-   - **what you were doing** — worth more than ten log lines without it;
+   - **what you were doing** - worth more than ten log lines without it;
    - client version, input mode (keyboard, touch, controller) and approximate ping;
    - anything unusual nearby: vehicle, effects, equipment, blocks.
 
