@@ -996,6 +996,7 @@ public final class MovementPacketProcessor {
             if (alert && data.beginSimulationCorrectionEpisode()) {
                 long now = System.nanoTime();
                 data.exemptBreakReach(now);
+                data.exemptBadPacketM(now);
                 double vl = data.violations.merge(CheckType.SIMULATION.id(), 1.0, Double::sum);
                 plugin.alert(player, CheckType.SIMULATION, vl, detail);
                 data.lastAlertNanos = now;

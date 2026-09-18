@@ -1056,6 +1056,7 @@ public final class PacketListener implements Listener {
         long now = System.nanoTime();
         if (check == CheckType.SIMULATION) {
             data.exemptBreakReach(now);
+            data.exemptBadPacketM(now);
         }
         if (check == CheckType.AUTOCLICKER_A) {
             plugin.alert(player, check, vl, detail);

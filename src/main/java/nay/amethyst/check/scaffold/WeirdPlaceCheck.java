@@ -20,7 +20,8 @@ public final class WeirdPlaceCheck {
                                  ItemUseInventoryTransaction transaction) {
         Vector3i block = transaction.getPosition();
         Vector3f click = transaction.getClickPosition();
-        if (block == null || click == null || data.inGrace()) {
+        if (block == null || click == null || data.inGrace()
+                || data.badPacketMExempt(System.nanoTime())) {
             return null;
         }
 

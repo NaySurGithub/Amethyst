@@ -26,6 +26,7 @@ public final class PlayerData {
     private static final long PROTOCOL_GRACE_MILLIS = 3000;
     private static final long VELOCITY_GRACE_MILLIS = 1500;
     private static final long BREAK_REACH_EXEMPT_NANOS = 1_000_000_000L;
+    private static final long BAD_PACKET_M_EXEMPT_NANOS = 1_200_000_000L;
     public static final long SPEAR_LUNGE_SEQUENCE = Long.MAX_VALUE - 1;
     public static final long SERVER_MOTION_SEQUENCE = Long.MAX_VALUE - 2;
     public static final long SERVER_MOTION_STOP_SEQUENCE = Long.MAX_VALUE - 3;
@@ -37,6 +38,7 @@ public final class PlayerData {
     private long movementCorrectionDeadline;
     private boolean simulationCorrectionEpisode;
     private long breakReachExemptUntilNanos;
+    private long badPacketMExemptUntilNanos;
     public int simulationMismatchFrames;
     public int phaseFrames;
     public Vector3 phaseEntry;
@@ -218,6 +220,14 @@ public final class PlayerData {
 
     public synchronized boolean breakReachExempt(long nowNanos) {
         return nowNanos < breakReachExemptUntilNanos;
+    }
+
+    public synchronized void exemptBadPacketM(long nowNanos) {
+        badPacketMExemptUntilNanos = nowNanos + BAD_PACKET_M_EXEMPT_NANOS;
+    }
+
+    public synchronized boolean badPacketMExempt(long nowNanos) {
+        return nowNanos < badPacketMExemptUntilNanos;
     }
 
     public synchronized boolean hasMovementCorrection() {
