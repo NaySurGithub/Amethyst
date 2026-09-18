@@ -36,7 +36,6 @@ public enum CheckType {
     FAST_USE_A("FastUse-A", "An item was consumed faster than it can be used."),
     BEDROCK_TOOL_A("BedrockTool-A", "The client identity matches a known tool.", true),
     BAD_SLOT_A("BadSlot-A", "An item was used from a slot outside the hotbar."),
-    COBWEB_A("Cobweb-A", "Movement through a cobweb faster than it allows.", true),
     SPRINT_A("Sprint-A", "Sprinting on too little food."),
     SPRINT_B("Sprint-B", "Sprinting while using an item."),
     SPRINT_C("Sprint-C", "Started sprinting while blinded."),

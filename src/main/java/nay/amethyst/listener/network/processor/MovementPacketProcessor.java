@@ -55,10 +55,6 @@ public final class MovementPacketProcessor {
     private static final double DEFAULT_MOVEMENT_SPEED = 0.1;
     private static final int PHASE_MINIMUM_FRAMES = 8;
     private static final double PHASE_MINIMUM_TRAVEL = 1.5;
-    private static final double COBWEB_MULTIPLIER = 0.25;
-    private static final double COBWEB_SPEED_ALLOWANCE = 3.0;
-    private static final double COBWEB_JUMP_ALLOWANCE = 0.2;
-    private static final int COBWEB_TICKS = 2;
     private static final double FLUID_TOLERANCE = 8.0;
     private static final int SPRINT_MINIMUM_FOOD = 6;
     private static final int SPRINT_TICKS = 4;
@@ -199,7 +195,6 @@ public final class MovementPacketProcessor {
                 if (inspectAirStall(event, player, data, result, observedMovement)) {
                     return;
                 }
-                inspectCobweb(event, player, data, clientPosition, observedMovement);
                 inspectSprint(event, player, data);
                 trackLevitation(player, data);
                 inspectElytra(event, player, data, packet);
@@ -472,35 +467,6 @@ public final class MovementPacketProcessor {
                 true, false);
         scheduleMovementCorrection(player, data, false);
         return true;
-    }
-
-    private void inspectCobweb(PacketReceiveEvent event, Player player, PlayerData data,
-                               Vector3f position, Vector3 movement) {
-        if (data.inGrace() || player.getAllowFlight() || player.isFlying() || player.isSpectator()
-                || player.isCreative() || player.getRiding() != null || data.hasMovementCorrection()
-                || data.hasPendingTeleport()
-                || !MovementCheckSupport.insideCobweb(player, position)) {
-            data.cobwebBuffer = 0;
-            return;
-        }
-
-        double horizontal = Math.sqrt(movement.x * movement.x + movement.z * movement.z);
-        double allowed = COBWEB_MULTIPLIER * (Math.max(DEFAULT_MOVEMENT_SPEED,
-                player.getMovementSpeed()) * COBWEB_SPEED_ALLOWANCE + COBWEB_JUMP_ALLOWANCE);
-        if (horizontal <= allowed) {
-            data.cobwebBuffer = 0;
-            return;
-        }
-
-        data.cobwebBuffer++;
-        if (data.cobwebBuffer < COBWEB_TICKS) {
-            return;
-        }
-
-        data.cobwebBuffer = 0;
-        violations.fail(event, player, data, CheckType.COBWEB_A, 1,
-                "moved " + NetworkCheckSupport.format(horizontal) + " of "
-                        + NetworkCheckSupport.format(allowed), false, true);
     }
 
     private void inspectSprint(PacketReceiveEvent event, Player player, PlayerData data) {

@@ -127,27 +127,6 @@ public final class MovementCheckSupport {
                 && Math.abs(box.maxZ() - (z + 1.0)) <= CUBE_EPSILON;
     }
 
-    public static boolean insideCobweb(Player player, Vector3f position) {
-        double half = player.getWidth() / 2.0;
-        double feet = position.getY() - player.getBaseOffset();
-        int minimumX = floor((float) (position.getX() - half));
-        int maximumX = floor((float) (position.getX() + half));
-        int minimumY = floor((float) feet);
-        int maximumY = floor((float) (feet + player.getHeight()));
-        int minimumZ = floor((float) (position.getZ() - half));
-        int maximumZ = floor((float) (position.getZ() + half));
-        for (int x = minimumX; x <= maximumX; x++) {
-            for (int y = minimumY; y <= maximumY; y++) {
-                for (int z = minimumZ; z <= maximumZ; z++) {
-                    if (BlockID.WEB.equals(player.getLevel().getBlock(x, y, z, 0).getId())) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
     public static boolean serverGround(Player player, Vector3f position) {
         double half = player.getWidth() / 2.0 - (player.isSneaking() ? 0.005 : 0.04);
         double feet = position.getY() - player.getBaseOffset();

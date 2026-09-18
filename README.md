@@ -69,7 +69,6 @@ Drop the jar into `plugins/` and restart. There are no dependencies.
 | `Timer` | More client frames than elapsed ticks. |
 | `Vehicle-A` | Boat, minecart or mount movement that does not match its prediction. |
 | `Phase-A` | Travelling through full solid blocks. |
-| `Cobweb-A` | Moving through a cobweb faster than it allows. |
 | `Sprint-A…C` | Sprinting with too little food, while using an item, or while blinded. |
 | `Elytra-A…B` | Gliding started while riding, or restarted too soon. |
 

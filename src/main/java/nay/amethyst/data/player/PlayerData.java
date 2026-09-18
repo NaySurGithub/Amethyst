@@ -55,7 +55,6 @@ public final class PlayerData {
     public int timerInputs;
     public int timerTicks;
     public int airStallBuffer;
-    public int cobwebBuffer;
     public int sprintFoodBuffer;
     public int sprintUseBuffer;
     public boolean wasSprinting;
@@ -492,7 +491,6 @@ public final class PlayerData {
         timerInputs = 0;
         timerTicks = 0;
         airStallBuffer = 0;
-        cobwebBuffer = 0;
         sprintFoodBuffer = 0;
         sprintUseBuffer = 0;
         wasSprinting = false;
