@@ -114,18 +114,71 @@ final class GroundAndAirStuckBlockTest {
     }
 
     @Test
-    void sweetBerryBush_inside_slowsMovementWithoutCompounding() {
+    void sweetBerryBush_inside_clearsVelocityAfterTheMove() {
+        TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.SWEET_BERRY_BUSH);
+        AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        state.velocity(new FloatVector(0.5f, 0.5f, 0.5f));
+
+        tick(state, world);
+
+        assertEquals(0.0f, state.velocity().x(), DELTA);
+        assertEquals(0.0f, state.velocity().z(), DELTA);
+        assertEquals(RESTING_FALL, state.velocity().y(), DELTA);
+    }
+
+    @Test
+    void sweetBerryBush_inside_movesThePlayerByTheSlowedVelocity() {
         TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.SWEET_BERRY_BUSH);
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
         state.velocity(new FloatVector(0.5f, 0.0f, 0.0f));
 
         tick(state, world);
-        float first = Math.abs(state.velocity().x());
-        tick(state, world);
-        float second = Math.abs(state.velocity().x());
 
-        assertTrue(first < 0.5f, "the bush should have slowed the player");
-        assertTrue(second < first, "speed must keep decaying, not grow back");
+        assertEquals(0.5f + 0.5f * 0.8f, state.position().x(), DELTA);
+    }
+
+    @Test
+    void powderSnow_withLeatherBootsAndJumpHeld_climbs() {
+        TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.POWDER_SNOW);
+        AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        state.wearingLeatherBoots(true);
+        state.updateInput(input(10.0f, MovementInputFlag.JUMPING));
+
+        tick(state, world);
+
+        assertEquals(10.0f + 0.2f * 1.5f, state.position().y(), DELTA);
+    }
+
+    @Test
+    void powderSnow_withoutLeatherBoots_jumpHeldDoesNotClimb() {
+        TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.POWDER_SNOW);
+        AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        state.updateInput(input(10.0f, MovementInputFlag.JUMPING));
+
+        tick(state, world);
+
+        assertTrue(state.position().y() <= 10.0f,
+                "without leather boots the player must not climb, got " + state.position().y());
+    }
+
+    @Test
+    void powderSnow_sneakHeld_descends() {
+        TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.POWDER_SNOW);
+        AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        state.wearingLeatherBoots(true);
+        state.updateInput(input(10.0f, MovementInputFlag.SNEAKING));
+
+        tick(state, world);
+
+        assertEquals(10.0f - 0.15f * 1.5f, state.position().y(), DELTA);
+    }
+
+    private static MovementInputFrame input(float feetY, MovementInputFlag flag) {
+        return MovementInputFrame.builder()
+                .position(new FloatVector(0.5f, feetY + MovementConstants.PLAYER_HEIGHT_OFFSET, 0.5f))
+                .rotation(FloatVector.ZERO)
+                .flag(flag)
+                .build();
     }
 
     @Test

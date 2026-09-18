@@ -8,6 +8,7 @@ import java.util.List;
 public final class ClientPlayerState {
     private boolean ready;
     private boolean wearingElytra;
+    private boolean wearingLeatherBoots;
     private GameType gameType = GameType.SURVIVAL;
 
     public synchronized boolean ready() {
@@ -22,13 +23,20 @@ public final class ClientPlayerState {
         return wearingElytra;
     }
 
+    public synchronized boolean wearingLeatherBoots() {
+        return wearingLeatherBoots;
+    }
+
     public synchronized void applyArmorContent(List<ItemData> armor) {
-        wearingElytra = armor.size() > 1 && isElytra(armor.get(1));
+        wearingElytra = armor.size() > 1 && is(armor.get(1), "minecraft:elytra");
+        wearingLeatherBoots = armor.size() > 3 && is(armor.get(3), "minecraft:leather_boots");
     }
 
     public synchronized void applyArmorSlot(int slot, ItemData item) {
         if (slot == 1) {
-            wearingElytra = isElytra(item);
+            wearingElytra = is(item, "minecraft:elytra");
+        } else if (slot == 3) {
+            wearingLeatherBoots = is(item, "minecraft:leather_boots");
         }
     }
 
@@ -42,8 +50,8 @@ public final class ClientPlayerState {
         }
     }
 
-    private static boolean isElytra(ItemData item) {
+    private static boolean is(ItemData item, String identifier) {
         return item != null && !item.isNull() && item.getDefinition() != null
-                && "minecraft:elytra".equals(item.getDefinition().getIdentifier());
+                && identifier.equals(item.getDefinition().getIdentifier());
     }
 }

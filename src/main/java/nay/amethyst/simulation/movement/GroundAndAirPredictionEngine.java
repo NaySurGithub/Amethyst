@@ -26,15 +26,17 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
         applyKnockback();
         moveRelative(acceleration);
         applyJump();
+        applyPowderSnowTraversal();
         applyClimbable();
 
         boolean cobweb = insideBlockNamed("web");
         boolean powderSnow = !cobweb && insideBlockNamed("powder_snow");
+        boolean berryBush = !cobweb && !powderSnow && insideBlockNamed("sweet_berry_bush");
         if (cobweb) {
             state.velocity(state.velocity().multiply(0.25f, 0.05f, 0.25f));
         } else if (powderSnow) {
             state.velocity(state.velocity().multiply(0.9f, 1.5f, 0.9f));
-        } else if (insideBlockNamed("sweet_berry_bush")) {
+        } else if (berryBush) {
             state.velocity(state.velocity().multiply(0.8f, 0.75f, 0.8f));
         }
 
@@ -67,7 +69,7 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
             state.jumpDelay(0);
         }
 
-        if (cobweb || powderSnow) {
+        if (cobweb || powderSnow || berryBush) {
             state.velocity(FloatVector.ZERO);
         }
 
@@ -107,7 +109,42 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
         x *= friction;
         z *= friction;
         state.velocity(new FloatVector(x, y, z));
+        applyHoneyWallSlide();
         return result(true);
+    }
+
+    private void applyPowderSnowTraversal() {
+        MovementBlockView block = world.block(floor(state.position().x()),
+                floor(state.position().y()), floor(state.position().z()));
+        if (!block.named("powder_snow")) {
+            return;
+        }
+        FloatVector velocity = state.velocity();
+        if (state.pressingSneak()) {
+            state.velocity(new FloatVector(velocity.x(), -0.15f, velocity.z()));
+        } else if (state.pressingJump() && state.wearingLeatherBoots()) {
+            state.velocity(new FloatVector(velocity.x(), 0.2f, velocity.z()));
+        }
+    }
+
+    private void applyHoneyWallSlide() {
+        FloatBox box = state.boundingBox().grow(1.0E-3f, 0.0f, 1.0E-3f);
+        int maximumX = (int) Math.ceil(box.maxX());
+        int maximumY = (int) Math.ceil(box.maxY());
+        int maximumZ = (int) Math.ceil(box.maxZ());
+        for (int x = floor(box.minX()); x < maximumX; x++) {
+            for (int y = floor(box.minY()); y < maximumY; y++) {
+                for (int z = floor(box.minZ()); z < maximumZ; z++) {
+                    if (!world.block(x, y, z).named("honey_block")
+                            || !box.intersects(new FloatBox(x, y, z, x + 1.0f, y + 1.0f, z + 1.0f))) {
+                        continue;
+                    }
+                    FloatVector velocity = state.velocity();
+                    state.velocity(new FloatVector(velocity.x() * 0.4f,
+                            Math.max(-0.12f, velocity.y()), velocity.z() * 0.4f));
+                }
+            }
+        }
     }
 
     /**
@@ -203,7 +240,7 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
                 y = -oldVelocity.y();
                 if (Math.abs(y) < 1.0E-4f) y = 0.0f;
             } else if (blockUnder.named("bed")) {
-                y = Math.min(1.0f, -0.66f * oldVelocity.y());
+                y = -0.75f * oldVelocity.y();
             } else {
                 y = 0.0f;
             }

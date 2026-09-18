@@ -321,6 +321,7 @@ public final class MovementPacketProcessor {
                 ? data.clientScale : player.getScale());
         data.motion.size(width, height, scale);
         data.motion.wearingElytra(data.clientPlayer.wearingElytra());
+        data.motion.wearingLeatherBoots(data.clientPlayer.wearingLeatherBoots());
         Item boots = player.getInventory().getBoots();
         data.motion.depthStrider(boots == null || boots.isNull()
                 ? 0 : boots.getEnchantmentLevel(Enchantment.ID_WATER_WALKER));

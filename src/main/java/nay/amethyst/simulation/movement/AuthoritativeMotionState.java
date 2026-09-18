@@ -91,6 +91,7 @@ public final class AuthoritativeMotionState {
     private boolean ready;
     private boolean consuming;
     private boolean wearingElytra;
+    private boolean wearingLeatherBoots;
     private boolean legacySlideOffset;
     private boolean modernSprintTiming = true;
     private boolean hasSupportingBlock;
@@ -813,6 +814,14 @@ public final class AuthoritativeMotionState {
 
     public void wearingElytra(boolean value) {
         wearingElytra = value;
+    }
+
+    public boolean wearingLeatherBoots() {
+        return wearingLeatherBoots;
+    }
+
+    public void wearingLeatherBoots(boolean value) {
+        wearingLeatherBoots = value;
     }
 
     public boolean legacySlideOffset() {

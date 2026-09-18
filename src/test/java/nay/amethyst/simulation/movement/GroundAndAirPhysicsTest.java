@@ -245,4 +245,57 @@ final class GroundAndAirPhysicsTest {
         assertTrue(state.onGround(), "the player should still be supported");
         assertEquals(10.0f, state.position().y(), DELTA);
     }
+
+    @Test
+    void bed_landingOnIt_bouncesAtThreeQuarters() {
+        TestBlockWorld world = new TestBlockWorld().floor(9, TestBlockWorld.BED);
+        AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.4f, 0.5f), false);
+        state.velocity(new FloatVector(0.0f, -0.6f, 0.0f));
+
+        tick(state, world);
+
+        assertEquals((0.75f * 0.6f - MovementConstants.NORMAL_GRAVITY)
+                * MovementConstants.GRAVITY_MULTIPLIER, state.velocity().y(), DELTA);
+    }
+
+    @Test
+    void bed_hardLanding_isNotCapped() {
+        TestBlockWorld world = new TestBlockWorld().floor(9, TestBlockWorld.BED);
+        AuthoritativeMotionState state = state(new FloatVector(0.5f, 11.9f, 0.5f), false);
+        state.velocity(new FloatVector(0.0f, -2.0f, 0.0f));
+
+        tick(state, world);
+
+        assertEquals((0.75f * 2.0f - MovementConstants.NORMAL_GRAVITY)
+                * MovementConstants.GRAVITY_MULTIPLIER, state.velocity().y(), DELTA);
+    }
+
+    @Test
+    void honeyWall_touchingItWhileFalling_slidesSlowly() {
+        TestBlockWorld world = new TestBlockWorld();
+        for (int y = 8; y <= 14; y++) {
+            world.put(1, y, 0, TestBlockWorld.HONEY);
+        }
+        AuthoritativeMotionState state = state(new FloatVector(0.7f, 10.0f, 0.5f), false);
+        state.velocity(new FloatVector(0.0f, -0.5f, 0.0f));
+
+        tick(state, world);
+
+        assertEquals(-0.12f, state.velocity().y(), DELTA);
+    }
+
+    @Test
+    void honeyWall_notTouchingIt_fallsNormally() {
+        TestBlockWorld world = new TestBlockWorld();
+        for (int y = 8; y <= 14; y++) {
+            world.put(3, y, 0, TestBlockWorld.HONEY);
+        }
+        AuthoritativeMotionState state = state(new FloatVector(0.7f, 10.0f, 0.5f), false);
+        state.velocity(new FloatVector(0.0f, -0.5f, 0.0f));
+
+        tick(state, world);
+
+        assertEquals((-0.5f - MovementConstants.NORMAL_GRAVITY) * MovementConstants.GRAVITY_MULTIPLIER,
+                state.velocity().y(), DELTA);
+    }
 }
