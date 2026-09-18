@@ -2,9 +2,10 @@ package nay.amethyst.prediction.vehicle;
 
 import nay.amethyst.data.player.PlayerData;
 import nay.amethyst.listener.network.support.NetworkCheckSupport;
-import nay.amethyst.history.model.Aabb;
-import nay.amethyst.prediction.common.Vec3;
-import nay.amethyst.prediction.movement.CollisionResolver;
+import nay.amethyst.simulation.movement.FloatBox;
+import nay.amethyst.simulation.movement.FloatVector;
+import nay.amethyst.simulation.movement.MovementCollisionEngine;
+import org.powernukkitx.math.Vector3;
 import org.cloudburstmc.math.vector.Vector2f;
 import org.cloudburstmc.math.vector.Vector3f;
 import org.cloudburstmc.protocol.bedrock.data.PlayerAuthInputData;
@@ -15,7 +16,6 @@ import org.powernukkitx.entity.Entity;
 import org.powernukkitx.entity.item.EntityBoat;
 import org.powernukkitx.entity.item.EntityMinecartAbstract;
 import org.powernukkitx.math.AxisAlignedBB;
-import org.powernukkitx.math.SimpleAxisAlignedBB;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,18 +32,19 @@ public final class VehiclePredictor {
             return passiveVehicle(player, vehicle, packet, ticks);
         }
 
-        Vec3 start = new Vec3(vehicle.x, vehicle.y, vehicle.z);
-        Vec3 target = vehicleTarget(vehicle, packet.getPosition());
-        Vec3 requested = target.add(-start.x(), -start.y(), -start.z());
-        Vec3 current = data.predictedVehicleVelocity == null ? Vec3.ZERO : data.predictedVehicleVelocity;
-        Vec3 server = new Vec3(vehicle.motionX, vehicle.motionY, vehicle.motionZ);
+        Vector3 start = new Vector3(vehicle.x, vehicle.y, vehicle.z);
+        Vector3 target = vehicleTarget(vehicle, packet.getPosition());
+        Vector3 requested = target.add(-start.x, -start.y, -start.z);
+        Vector3 current = data.predictedVehicleVelocity == null ? Vector3.ZERO : data.predictedVehicleVelocity;
+        Vector3 server = new Vector3(vehicle.motionX, vehicle.motionY, vehicle.motionZ);
         Vector3f delta = packet.getPosDelta();
-        Vec3 reported = delta == null ? Vec3.ZERO : new Vec3(delta.getX(), delta.getY(), delta.getZ());
-        if (reported.lengthSquared() > 9) reported = Vec3.ZERO;
+        Vector3 reported = delta == null ? Vector3.ZERO : new Vector3(delta.getX(), delta.getY(), delta.getZ());
+        if (reported.lengthSquared() > 9) reported = Vector3.ZERO;
         VehicleSimulation simulation = bestSimulation(vehicle, packet, requested, current, server, reported, ticks);
 
-        CollisionResolver.CollisionResult collision = collide(vehicle, requested);
-        double collisionError = requested.distance(collision.movement());
+        MovementCollisionEngine.BoxCollision collision = collide(vehicle, requested);
+        FloatVector resolved = collision.movement();
+        double collisionError = requested.distance(new Vector3(resolved.x(), resolved.y(), resolved.z()));
         double physicsError = requested.distance(simulation.movement());
         double limitError = movementLimitError(vehicle, requested, ticks);
         double entityAllowance = nearbyEntityAllowance(vehicle, requested);
@@ -57,22 +58,22 @@ public final class VehiclePredictor {
     private static VehiclePredictionResult passiveVehicle(Player player, Entity vehicle,
                                                             PlayerAuthInputPacket packet, int ticks) {
         Vector3f position = packet.getPosition();
-        Vec3 target = new Vec3(position.getX(), position.getY(), position.getZ());
-        Vec3 serverSeat = new Vec3(player.x, player.y + player.getBaseOffset(), player.z);
-        Vec3 movement = new Vec3(vehicle.motionX * ticks, vehicle.motionY * ticks, vehicle.motionZ * ticks);
+        Vector3 target = new Vector3(position.getX(), position.getY(), position.getZ());
+        Vector3 serverSeat = new Vector3(player.x, player.y + player.getBaseOffset(), player.z);
+        Vector3 movement = new Vector3(vehicle.motionX * ticks, vehicle.motionY * ticks, vehicle.motionZ * ticks);
         double latencyTicks = Math.min(2, Math.max(0, NetworkCheckSupport.ping(player) / 50.0));
         double tolerance = (vehicle instanceof EntityMinecartAbstract ? 0.45 : 0.6)
                 + Math.hypot(vehicle.motionX, vehicle.motionZ) * latencyTicks;
         double offset = Math.max(0, target.distance(serverSeat) - tolerance);
         return new VehiclePredictionResult(vehicle instanceof EntityMinecartAbstract ? "minecart" : "passive-mount",
-                offset, movement, new Vec3(vehicle.motionX, vehicle.motionY, vehicle.motionZ), false, false);
+                offset, movement, new Vector3(vehicle.motionX, vehicle.motionY, vehicle.motionZ), false, false);
     }
 
-    private static VehicleSimulation bestSimulation(Entity vehicle, PlayerAuthInputPacket packet, Vec3 requested,
-                                                     Vec3 predicted, Vec3 server, Vec3 reported, int ticks) {
-        List<Vec3> starts = List.of(predicted, server, reported, Vec3.ZERO);
+    private static VehicleSimulation bestSimulation(Entity vehicle, PlayerAuthInputPacket packet, Vector3 requested,
+                                                     Vector3 predicted, Vector3 server, Vector3 reported, int ticks) {
+        List<Vector3> starts = List.of(predicted, server, reported, Vector3.ZERO);
         VehicleSimulation best = null;
-        for (Vec3 start : starts) {
+        for (Vector3 start : starts) {
             VehicleSimulation candidate = vehicle instanceof EntityBoat
                     ? predictBoat(vehicle, packet, start, ticks)
                     : predictMount(vehicle, packet, start, ticks);
@@ -83,10 +84,10 @@ public final class VehiclePredictor {
         return best;
     }
 
-    private static VehicleSimulation predictBoat(Entity vehicle, PlayerAuthInputPacket packet, Vec3 start,
+    private static VehicleSimulation predictBoat(Entity vehicle, PlayerAuthInputPacket packet, Vector3 start,
                                                   int ticks) {
-        Vec3 velocity = start;
-        Vec3 movement = Vec3.ZERO;
+        Vector3 velocity = start;
+        Vector3 movement = Vector3.ZERO;
         Vector2f input = packet.getMoveVector();
         boolean leftPaddle = packet.getInputData().contains(PlayerAuthInputData.PADDLING_LEFT);
         boolean rightPaddle = packet.getInputData().contains(PlayerAuthInputData.PADDLING_RIGHT);
@@ -95,15 +96,15 @@ public final class VehiclePredictor {
         double yaw = vehicleYaw(packet);
         double waterDifference = vehicle instanceof EntityBoat boat ? boat.getWaterLevel() : Double.MAX_VALUE;
         for (int tick = 0; tick < ticks; tick++) {
-            velocity = velocity.multiply(0.9, 1, 0.9);
+            velocity = new Vector3(velocity.x * 0.9, velocity.y, velocity.z * 0.9);
             if (leftPaddle != rightPaddle) yaw += leftPaddle ? -0.035 : 0.035;
             velocity = velocity.add(-Math.sin(yaw) * forward * 0.04, 0,
                     Math.cos(yaw) * forward * 0.04);
             if (inWater(vehicle)) {
                 if (Double.isFinite(waterDifference) && waterDifference != Double.MAX_VALUE) {
-                    double correction = -(waterDifference + movement.y()) * 0.035 - velocity.y() * 0.82;
-                    velocity = new Vec3(velocity.x(), clamp(velocity.y() + correction, -0.025, 0.025), velocity.z());
-                } else velocity = new Vec3(velocity.x(), clamp(velocity.y() + 0.04, -0.08, 0.08), velocity.z());
+                    double correction = -(waterDifference + movement.y) * 0.035 - velocity.y * 0.82;
+                    velocity = new Vector3(velocity.x, clamp(velocity.y + correction, -0.025, 0.025), velocity.z);
+                } else velocity = new Vector3(velocity.x, clamp(velocity.y + 0.04, -0.08, 0.08), velocity.z);
                 velocity = applyBubbleColumn(vehicle, velocity);
             } else velocity = velocity.add(0, -vehicle.getGravity(), 0);
             movement = movement.add(velocity);
@@ -111,10 +112,10 @@ public final class VehiclePredictor {
         return new VehicleSimulation(movement, velocity);
     }
 
-    private static VehicleSimulation predictMount(Entity vehicle, PlayerAuthInputPacket packet, Vec3 start,
+    private static VehicleSimulation predictMount(Entity vehicle, PlayerAuthInputPacket packet, Vector3 start,
                                                    int ticks) {
-        Vec3 velocity = start;
-        Vec3 movement = Vec3.ZERO;
+        Vector3 velocity = start;
+        Vector3 movement = Vector3.ZERO;
         Vector2f input = packet.getMoveVector();
         double strafe = input == null ? 0 : clamp(input.getX(), -1, 1);
         double forward = input == null ? 0 : clamp(input.getY(), -1, 1);
@@ -131,12 +132,12 @@ public final class VehiclePredictor {
         double targetZ = (Math.cos(yaw) * forward + Math.sin(yaw) * strafe) * cap;
 
         for (int tick = 0; tick < ticks; tick++) {
-            velocity = new Vec3(velocity.x() + (targetX - velocity.x()) * 0.3,
-                    velocity.y(), velocity.z() + (targetZ - velocity.z()) * 0.3);
+            velocity = new Vector3(velocity.x + (targetX - velocity.x) * 0.3,
+                    velocity.y, velocity.z + (targetZ - velocity.z) * 0.3);
             if (vehicle.isAirControlled()) {
                 double vertical = packet.getInputData().contains(PlayerAuthInputData.ASCEND) ? cap
                         : packet.getInputData().contains(PlayerAuthInputData.DESCEND) ? -cap : 0;
-                velocity = new Vec3(velocity.x(), velocity.y() + (vertical - velocity.y()) * 0.3, velocity.z());
+                velocity = new Vector3(velocity.x, velocity.y + (vertical - velocity.y) * 0.3, velocity.z);
             } else if (!vehicle.isOnGround()) {
                 velocity = velocity.add(0, -vehicle.getGravity(), 0);
             }
@@ -145,9 +146,9 @@ public final class VehiclePredictor {
         return new VehicleSimulation(movement, velocity);
     }
 
-    private static double movementLimitError(Entity vehicle, Vec3 movement, int ticks) {
-        double horizontal = movement.horizontalLength() / ticks;
-        double vertical = Math.abs(movement.y()) / ticks;
+    private static double movementLimitError(Entity vehicle, Vector3 movement, int ticks) {
+        double horizontal = Math.hypot(movement.x, movement.z) / ticks;
+        double vertical = Math.abs(movement.y) / ticks;
         double horizontalLimit;
         double verticalLimit;
         if (vehicle instanceof EntityBoat) {
@@ -163,26 +164,31 @@ public final class VehiclePredictor {
         return Math.hypot(Math.max(0, horizontal - horizontalLimit), Math.max(0, vertical - verticalLimit));
     }
 
-    private static CollisionResolver.CollisionResult collide(Entity vehicle, Vec3 requested) {
-        Aabb box = Aabb.from(vehicle.getBoundingBox());
-        Aabb area = box.stretch(requested).expand(1.0E-4);
-        AxisAlignedBB query = new SimpleAxisAlignedBB(area.minX(), area.minY(), area.minZ(),
-                area.maxX(), area.maxY(), area.maxZ());
-        List<Aabb> boxes = new ArrayList<>();
+    private static MovementCollisionEngine.BoxCollision collide(Entity vehicle, Vector3 requested) {
+        AxisAlignedBB bounds = vehicle.getBoundingBox();
+        AxisAlignedBB query = bounds.addCoord(requested.x, requested.y, requested.z)
+                .grow(1.0E-4, 1.0E-4, 1.0E-4);
+        List<FloatBox> boxes = new ArrayList<>();
         for (Block block : vehicle.getLevel().getCollisionBlocks(query, false)) {
             AxisAlignedBB[] collisions = block.getCollisionBoxes();
             if (collisions == null) continue;
             for (AxisAlignedBB collision : collisions) {
-                if (collision != null) boxes.add(Aabb.from(collision));
+                if (collision != null) boxes.add(floatBox(collision));
             }
         }
-        return CollisionResolver.resolveWithBoxes(box, requested, vehicle.isOnGround(), boxes);
+        FloatVector movement = new FloatVector((float) requested.x, (float) requested.y, (float) requested.z);
+        return MovementCollisionEngine.collide(floatBox(bounds), movement, vehicle.isOnGround(), boxes);
     }
 
-    private static Vec3 vehicleTarget(Entity vehicle, Vector3f packetPosition) {
+    private static FloatBox floatBox(AxisAlignedBB box) {
+        return new FloatBox((float) box.getMinX(), (float) box.getMinY(), (float) box.getMinZ(),
+                (float) box.getMaxX(), (float) box.getMaxY(), (float) box.getMaxZ());
+    }
+
+    private static Vector3 vehicleTarget(Entity vehicle, Vector3f packetPosition) {
         double y = packetPosition.getY();
         if (vehicle instanceof EntityBoat boat) y -= boat.getBaseOffset();
-        return new Vec3(packetPosition.getX(), y, packetPosition.getZ());
+        return new Vector3(packetPosition.getX(), y, packetPosition.getZ());
     }
 
     private static boolean inWater(Entity vehicle) {
@@ -191,18 +197,17 @@ public final class VehiclePredictor {
         return inside.contains("water") || below.contains("water");
     }
 
-    private static Vec3 applyBubbleColumn(Entity vehicle, Vec3 velocity) {
+    private static Vector3 applyBubbleColumn(Entity vehicle, Vector3 velocity) {
         Block block = vehicle.getLevel().getBlock(vehicle.getFloorX(), vehicle.getFloorY(), vehicle.getFloorZ());
         if (!(block instanceof org.powernukkitx.block.BlockBubbleColumn column)) return velocity;
         return column.isDragDown()
-                ? new Vec3(velocity.x(), Math.max(-0.3, velocity.y() - 0.03), velocity.z())
-                : new Vec3(velocity.x(), Math.min(0.7, velocity.y() + 0.08), velocity.z());
+                ? new Vector3(velocity.x, Math.max(-0.3, velocity.y - 0.03), velocity.z)
+                : new Vector3(velocity.x, Math.min(0.7, velocity.y + 0.08), velocity.z);
     }
 
-    private static double nearbyEntityAllowance(Entity vehicle, Vec3 movement) {
-        Aabb swept = Aabb.from(vehicle.getBoundingBox()).stretch(movement).expand(0.25);
-        AxisAlignedBB area = new SimpleAxisAlignedBB(swept.minX(), swept.minY(), swept.minZ(),
-                swept.maxX(), swept.maxY(), swept.maxZ());
+    private static double nearbyEntityAllowance(Entity vehicle, Vector3 movement) {
+        AxisAlignedBB area = vehicle.getBoundingBox().addCoord(movement.x, movement.y, movement.z)
+                .grow(0.25, 0.25, 0.25);
         return vehicle.getLevel().getNearbyEntities(area, vehicle).length == 0 ? 0 : 0.35;
     }
 
@@ -215,6 +220,6 @@ public final class VehiclePredictor {
         return Math.max(minimum, Math.min(maximum, value));
     }
 
-    private record VehicleSimulation(Vec3 movement, Vec3 velocity) {
+    private record VehicleSimulation(Vector3 movement, Vector3 velocity) {
     }
 }

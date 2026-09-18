@@ -1,6 +1,6 @@
 package nay.amethyst.history.model;
 
-import nay.amethyst.prediction.common.Vec3;
+import org.powernukkitx.math.Vector3;
 
 import java.util.Collections;
 import java.util.ArrayList;
@@ -11,8 +11,8 @@ public record WorldFrame(
         long clientTick,
         long capturedNanos,
         String levelName,
-        Vec3 position,
-        Vec3 velocity,
+        Vector3 position,
+        Vector3 velocity,
         float yaw,
         float pitch,
         boolean onGround,

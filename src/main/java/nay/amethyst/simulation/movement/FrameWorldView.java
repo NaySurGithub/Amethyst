@@ -149,9 +149,9 @@ public final class FrameWorldView implements MovementWorldView {
             water |= block.water();
             lava |= block.lava();
             submersion = Math.max(submersion, top - area.minY());
-            flowX += (float) block.flow().x();
-            flowY += (float) block.flow().y();
-            flowZ += (float) block.flow().z();
+            flowX += (float) block.flow().x;
+            flowY += (float) block.flow().y;
+            flowZ += (float) block.flow().z;
 
             if (block.bubbleDirection() != 0 && bubbleDirection == 0) {
                 bubbleDirection = block.bubbleDirection();

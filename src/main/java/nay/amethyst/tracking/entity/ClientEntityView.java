@@ -1,11 +1,11 @@
 package nay.amethyst.tracking.entity;
 
-import nay.amethyst.prediction.common.Vec3;
+import org.powernukkitx.math.Vector3;
 
 public record ClientEntityView(
         long runtimeId,
-        Vec3 previousPosition,
-        Vec3 position,
+        Vector3 previousPosition,
+        Vector3 position,
         boolean player,
         int ticksSinceTeleport,
         double width,

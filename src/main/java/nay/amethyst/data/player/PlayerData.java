@@ -1,6 +1,6 @@
 package nay.amethyst.data.player;
 
-import nay.amethyst.prediction.common.Vec3;
+import org.powernukkitx.math.Vector3;
 import nay.amethyst.history.timeline.CompensatedHistory;
 import nay.amethyst.tracking.entity.ClientEntityTracker;
 import nay.amethyst.tracking.network.NetworkTimeline;
@@ -39,13 +39,13 @@ public final class PlayerData {
     private long breakReachExemptUntilNanos;
     public int simulationMismatchFrames;
     public int phaseFrames;
-    public Vec3 phaseEntry;
+    public Vector3 phaseEntry;
     public double simulationOffsetBuffer;
     public boolean nearServerMotionTick;
     public volatile boolean movementPacketDropped;
     public volatile boolean kickScheduled;
     public volatile boolean meleeKnockbackPending;
-    public Vec3 expectedMeleeKnockback;
+    public Vector3 expectedMeleeKnockback;
     public int meleeKnockbackTicks;
     public double meleeKnockbackObserved;
     public double meleeKnockbackExpected;
@@ -73,8 +73,8 @@ public final class PlayerData {
     public long itemUseStartTick = Long.MIN_VALUE;
     public long riptideUseStartTick = Long.MIN_VALUE;
     /** Last ground position the simulation agreed with, and the target of a setback. */
-    public Vec3 lastVerifiedPosition;
-    public Vec3 lastVerifiedVehiclePosition;
+    public Vector3 lastVerifiedPosition;
+    public Vector3 lastVerifiedVehiclePosition;
     private DirectSetback directSetback;
     private int pendingTeleportAcks;
     private long pendingTeleportDeadline;
@@ -110,8 +110,8 @@ public final class PlayerData {
     public int timerSamples;
     public int timerOverLimitSamples;
     public Vector3f lastPosition;
-    public Vec3 authoritativePosition;
-    public Vec3 predictedVelocity = Vec3.ZERO;
+    public Vector3 authoritativePosition;
+    public Vector3 predictedVelocity = Vector3.ZERO;
     public boolean predictedOnGround;
     public boolean predictedHorizontalCollision;
     public boolean predictedSprinting;
@@ -145,7 +145,7 @@ public final class PlayerData {
     public long vehicleId = -1;
     public boolean vehicleInputConfirmed;
     public int vehicleWarmupPackets;
-    public Vec3 predictedVehicleVelocity = Vec3.ZERO;
+    public Vector3 predictedVehicleVelocity = Vector3.ZERO;
     public double vehicleBuffer;
     public double simulatedFallDistance;
     public long pendingFallTick = -1;
@@ -169,19 +169,19 @@ public final class PlayerData {
     public AuthoritativeMovementPipeline movementPipeline = new AuthoritativeMovementPipeline(
             motion, MovementOptions.defaults());
     private final Deque<VelocityImpulse> velocityImpulses = new ArrayDeque<>();
-    private final List<Vec3> queuedVelocities = new ArrayList<>();
+    private final List<Vector3> queuedVelocities = new ArrayList<>();
     private boolean velocityFlushScheduled;
     private int pendingVelocityAcks;
     private long velocitySequence;
     private long velocityEpoch;
-    private List<Vec3> windChargeCandidates = List.of();
+    private List<Vector3> windChargeCandidates = List.of();
     private long windChargeUntilInputSequence;
-    private Vec3 spearLungeCandidate;
+    private Vector3 spearLungeCandidate;
     private long spearLungeUntilInputSequence;
-    private List<Vec3> riptideCandidates = List.of();
+    private List<Vector3> riptideCandidates = List.of();
     private long riptideUntilInputSequence;
     private boolean riptideGroundStep;
-    private final List<Vec3> serverMotionCandidates = new ArrayList<>();
+    private final List<Vector3> serverMotionCandidates = new ArrayList<>();
     private long serverMotionUntilInputSequence;
     public synchronized void addPendingTeleport() {
         pendingTeleportAcks++;
@@ -261,14 +261,14 @@ public final class PlayerData {
         directSetback = null;
     }
 
-    public synchronized void enqueueVelocity(Vec3 velocity) {
+    public synchronized void enqueueVelocity(Vector3 velocity) {
         gracePeriods.grant(GraceReason.VELOCITY, VELOCITY_GRACE_MILLIS);
         velocityImpulses.addLast(new VelocityImpulse(++velocitySequence, inputSequence,
                 System.nanoTime(), velocity));
         while (velocityImpulses.size() > 8) velocityImpulses.removeFirst();
     }
 
-    public synchronized boolean queueVelocity(Vec3 velocity) {
+    public synchronized boolean queueVelocity(Vector3 velocity) {
         queuedVelocities.add(velocity);
         if (velocityFlushScheduled) return false;
         velocityFlushScheduled = true;
@@ -283,7 +283,7 @@ public final class PlayerData {
         return velocityEpoch == epoch;
     }
 
-    public synchronized void acknowledgeVelocities(List<Vec3> velocities) {
+    public synchronized void acknowledgeVelocities(List<Vector3> velocities) {
         if (pendingVelocityAcks > 0) pendingVelocityAcks--;
         if (velocities.isEmpty()) return;
         velocityImpulses.clear();
@@ -310,12 +310,12 @@ public final class PlayerData {
         gracePeriods.revoke(GraceReason.VELOCITY);
     }
 
-    public synchronized void setWindChargeCandidates(List<Vec3> candidates) {
+    public synchronized void setWindChargeCandidates(List<Vector3> candidates) {
         windChargeCandidates = List.copyOf(candidates);
         windChargeUntilInputSequence = inputSequence + 12;
     }
 
-    public synchronized List<Vec3> windChargeCandidates() {
+    public synchronized List<Vector3> windChargeCandidates() {
         if (inputSequence > windChargeUntilInputSequence) {
             windChargeCandidates = List.of();
         }
@@ -350,12 +350,12 @@ public final class PlayerData {
         return leftCps;
     }
 
-    public synchronized void setSpearLungeCandidate(Vec3 candidate) {
+    public synchronized void setSpearLungeCandidate(Vector3 candidate) {
         spearLungeCandidate = candidate;
         spearLungeUntilInputSequence = inputSequence + 10;
     }
 
-    public synchronized Vec3 spearLungeCandidate() {
+    public synchronized Vector3 spearLungeCandidate() {
         if (inputSequence > spearLungeUntilInputSequence) clearSpearLungeCandidate();
         return spearLungeCandidate;
     }
@@ -365,13 +365,13 @@ public final class PlayerData {
         spearLungeUntilInputSequence = 0;
     }
 
-    public synchronized void setRiptideCandidates(List<Vec3> candidates, boolean groundStep) {
+    public synchronized void setRiptideCandidates(List<Vector3> candidates, boolean groundStep) {
         riptideCandidates = List.copyOf(candidates);
         riptideUntilInputSequence = inputSequence + 4;
         riptideGroundStep = groundStep;
     }
 
-    public synchronized List<Vec3> riptideCandidates() {
+    public synchronized List<Vector3> riptideCandidates() {
         if (inputSequence > riptideUntilInputSequence) clearRiptideCandidates();
         return riptideCandidates;
     }
@@ -396,25 +396,25 @@ public final class PlayerData {
         motion.stopRiptide();
     }
 
-    public synchronized void addServerMotionCandidate(Vec3 candidate) {
+    public synchronized void addServerMotionCandidate(Vector3 candidate) {
         serverMotionCandidates.add(candidate);
         while (serverMotionCandidates.size() > 6) serverMotionCandidates.removeFirst();
         serverMotionUntilInputSequence = inputSequence + 12;
     }
 
-    public synchronized List<Vec3> serverMotionCandidates() {
+    public synchronized List<Vector3> serverMotionCandidates() {
         if (inputSequence > serverMotionUntilInputSequence) clearServerMotionCandidates();
         return List.copyOf(serverMotionCandidates);
     }
 
-    public synchronized boolean matchesServerMotion(Vec3 velocity) {
+    public synchronized boolean matchesServerMotion(Vector3 velocity) {
         return serverMotionCandidates().stream().anyMatch(candidate -> candidate.distance(velocity) <= 0.01);
     }
 
     /** Consumes a server impulse candidate closely matching the observed movement. */
-    public synchronized boolean claimMatchingServerMotion(Vec3... observedMotions) {
-        for (Vec3 candidate : serverMotionCandidates()) {
-            for (Vec3 observed : observedMotions) {
+    public synchronized boolean claimMatchingServerMotion(Vector3... observedMotions) {
+        for (Vector3 candidate : serverMotionCandidates()) {
+            for (Vector3 observed : observedMotions) {
                 if (matchesServerMotion(candidate, observed)) {
                     clearServerMotionCandidates();
                     return true;
@@ -425,9 +425,9 @@ public final class PlayerData {
     }
 
     /** Whether the movement heads roughly along an armed impulse, without consuming it. */
-    public synchronized boolean nearServerMotion(Vec3... observedMotions) {
-        for (Vec3 candidate : serverMotionCandidates()) {
-            for (Vec3 observed : observedMotions) {
+    public synchronized boolean nearServerMotion(Vector3... observedMotions) {
+        for (Vector3 candidate : serverMotionCandidates()) {
+            for (Vector3 observed : observedMotions) {
                 if (alignedWithServerMotion(candidate, observed)) {
                     return true;
                 }
@@ -436,12 +436,12 @@ public final class PlayerData {
         return false;
     }
 
-    private static boolean matchesServerMotion(Vec3 candidate, Vec3 observed) {
+    private static boolean matchesServerMotion(Vector3 candidate, Vector3 observed) {
         return Math.sqrt(observed.lengthSquared()) >= 0.08
                 && candidate.distance(observed) <= 0.15;
     }
 
-    private static boolean alignedWithServerMotion(Vec3 candidate, Vec3 observed) {
+    private static boolean alignedWithServerMotion(Vector3 candidate, Vector3 observed) {
         double candidateLength = Math.sqrt(candidate.lengthSquared());
         double observedLength = Math.sqrt(observed.lengthSquared());
         if (candidateLength < 0.15 || observedLength < 0.15) {
@@ -453,9 +453,9 @@ public final class PlayerData {
             return false;
         }
 
-        double alignment = (candidate.x() * observed.x()
-                + candidate.y() * observed.y()
-                + candidate.z() * observed.z()) / (candidateLength * observedLength);
+        double alignment = (candidate.x * observed.x
+                + candidate.y * observed.y
+                + candidate.z * observed.z) / (candidateLength * observedLength);
         return alignment >= 0.9;
     }
 
@@ -527,7 +527,7 @@ public final class PlayerData {
         lastTotemPopNanos = 0;
         autoTotemBuffer = 0;
         lastCombatNanos = 0;
-        predictedVelocity = Vec3.ZERO;
+        predictedVelocity = Vector3.ZERO;
         authoritativePosition = null;
         penetratedLastFrame = false;
         stuckInCollider = false;
@@ -596,7 +596,7 @@ public final class PlayerData {
         vehicleId = -1;
         vehicleInputConfirmed = false;
         vehicleWarmupPackets = 0;
-        predictedVehicleVelocity = Vec3.ZERO;
+        predictedVehicleVelocity = Vector3.ZERO;
         vehicleBuffer = 0;
         penetratedLastFrame = false;
         stuckInCollider = false;

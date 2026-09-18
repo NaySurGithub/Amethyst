@@ -10,7 +10,7 @@ import nay.amethyst.check.packet.BadPacketCheck;
 import nay.amethyst.check.type.CheckType;
 import nay.amethyst.data.player.PlayerData;
 import nay.amethyst.data.player.GraceReason;
-import nay.amethyst.prediction.common.Vec3;
+import org.powernukkitx.math.Vector3;
 import nay.amethyst.tracking.entity.ClientEntityTracker;
 import nay.amethyst.tracking.network.ack.AcknowledgmentType;
 import nay.amethyst.history.model.BlockFrame;
@@ -756,16 +756,16 @@ public final class PacketListener implements Listener {
         if (event.getPacket() instanceof SetActorMotionPacket packet
                 && packet.getTargetRuntimeID() == player.getId()) {
             Vector3f motion = packet.getMotion();
-            Vec3 velocity = new Vec3(motion.getX(), motion.getY(), motion.getZ());
+            Vector3 velocity = new Vector3(motion.getX(), motion.getY(), motion.getZ());
             long velocityEpoch = data.velocityEpoch();
             sendAcknowledgmentAfter(event, player, data, AcknowledgmentType.VELOCITY, () -> {
                 if (!data.isVelocityEpoch(velocityEpoch)) return;
                 data.acknowledgeVelocities(List.of(velocity));
-                data.motion.knockback(new FloatVector((float) velocity.x(),
-                        (float) velocity.y(), (float) velocity.z()));
+                data.motion.knockback(new FloatVector((float) velocity.x,
+                        (float) velocity.y, (float) velocity.z));
                 if (data.meleeKnockbackPending) {
                     data.meleeKnockbackPending = false;
-                    if (velocity.x() == 0.0 && velocity.z() == 0.0) {
+                    if (velocity.x == 0.0 && velocity.z == 0.0) {
                         return;
                     }
                     data.expectedMeleeKnockback = velocity;
@@ -835,8 +835,8 @@ public final class PacketListener implements Listener {
         if (data == null || !data.joined || event.getMotion() == null) return;
         var motion = event.getMotion();
         if (!Double.isFinite(motion.x) || !Double.isFinite(motion.y) || !Double.isFinite(motion.z)) return;
-        Vec3 candidate = new Vec3(motion.x, motion.y, motion.z);
-        Vec3 lunge = data.spearLungeCandidate();
+        Vector3 candidate = new Vector3(motion.x, motion.y, motion.z);
+        Vector3 lunge = data.spearLungeCandidate();
         if (lunge != null && lunge.distance(candidate) <= 1.0E-6) {
             return;
         }
@@ -855,7 +855,7 @@ public final class PacketListener implements Listener {
         if (direction.lengthSquared() == 0) return;
         direction = direction.normalize().multiply(0.5 + level * 0.4);
         var motion = player.getMotion();
-        data.setSpearLungeCandidate(new Vec3(motion.x + direction.x, motion.y, motion.z + direction.z));
+        data.setSpearLungeCandidate(new Vector3(motion.x + direction.x, motion.y, motion.z + direction.z));
     }
 
     public void handleEarlyMovementRejection(Player player, MovementPreValidationResult result) {
@@ -932,9 +932,9 @@ public final class PacketListener implements Listener {
         }
 
         data.riptideUseStartTick = Long.MIN_VALUE;
-        Vec3 impulse = RiptidePhysics.impulse(yaw, pitch, level);
-        Vec3 current = data.predictedVelocity == null ? Vec3.ZERO : data.predictedVelocity;
-        Vec3 combined = data.motion.immobile() ? current : current.add(impulse);
+        Vector3 impulse = RiptidePhysics.impulse(yaw, pitch, level);
+        Vector3 current = data.predictedVelocity == null ? Vector3.ZERO : data.predictedVelocity;
+        Vector3 combined = data.motion.immobile() ? current : current.add(impulse);
         data.setRiptideCandidates(List.of(combined), player.isOnGround());
     }
 
@@ -1077,8 +1077,8 @@ public final class PacketListener implements Listener {
         }
         synchronizeCorrection(data, position);
         data.predictedVelocity = MovementCheckSupport.finite(velocity)
-                ? new Vec3(velocity.getX(), velocity.getY(), velocity.getZ())
-                : Vec3.ZERO;
+                ? new Vector3(velocity.getX(), velocity.getY(), velocity.getZ())
+                : Vector3.ZERO;
         data.predictedOnGround = onGround;
         data.predictedHorizontalCollision = false;
         data.penetratedLastFrame = false;
@@ -1090,7 +1090,7 @@ public final class PacketListener implements Listener {
 
     private static void synchronizeCorrection(PlayerData data, Vector3f position) {
         data.lastPosition = position;
-        data.authoritativePosition = new Vec3(
+        data.authoritativePosition = new Vector3(
                 position.getX(), position.getY(), position.getZ());
         data.jumpDelayTicks = 0;
         data.vehicleBuffer = 0;
@@ -1194,13 +1194,13 @@ public final class PacketListener implements Listener {
     private void registerWindCharge(Player player, EntityWindCharge charge) {
         PlayerData data = players.get(player.getUniqueId());
         if (data == null || !data.joined) return;
-        Vec3 predicted = data.predictedVelocity == null ? Vec3.ZERO : data.predictedVelocity;
+        Vector3 predicted = data.predictedVelocity == null ? Vector3.ZERO : data.predictedVelocity;
         double pushX = (player.x - charge.x) * 0.20;
         double pushZ = (player.z - charge.z) * 0.20;
-        Vec3 pnx = new Vec3(predicted.x() * 0.5 + pushX,
-                predicted.y() * 0.5 + 0.60, predicted.z() * 0.5 + pushZ);
-        Vec3 bedrockRadial = predicted.add(pushX, 1.05, pushZ);
-        Vec3 bedrockVertical = predicted.add(0, 1.05, 0);
+        Vector3 pnx = new Vector3(predicted.x * 0.5 + pushX,
+                predicted.y * 0.5 + 0.60, predicted.z * 0.5 + pushZ);
+        Vector3 bedrockRadial = predicted.add(pushX, 1.05, pushZ);
+        Vector3 bedrockVertical = predicted.add(0, 1.05, 0);
         data.setWindChargeCandidates(List.of(pnx, bedrockRadial, bedrockVertical));
     }
 }

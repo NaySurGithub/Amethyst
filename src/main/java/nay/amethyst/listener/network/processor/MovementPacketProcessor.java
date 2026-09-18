@@ -9,7 +9,6 @@ import nay.amethyst.listener.network.support.NetworkCheckSupport;
 import nay.amethyst.listener.network.support.VehiclePositionSupport;
 import nay.amethyst.packet.movement.MovementPreValidationResult;
 import nay.amethyst.packet.movement.MovementInputAdapter;
-import nay.amethyst.prediction.common.Vec3;
 import nay.amethyst.prediction.vehicle.VehiclePredictionResult;
 import nay.amethyst.prediction.vehicle.VehiclePredictor;
 import nay.amethyst.simulation.movement.FloatVector;
@@ -154,8 +153,8 @@ public final class MovementPacketProcessor {
         if (!data.hasPendingTeleport() && data.motion.pendingTeleports() > 0) {
             data.motion.clearPendingTeleports();
         }
-        Vec3 observedDelta = new Vec3(delta.getX(), delta.getY(), delta.getZ());
-        Vec3 observedMovement = data.lastPosition == null ? observedDelta : new Vec3(
+        Vector3 observedDelta = new Vector3(delta.getX(), delta.getY(), delta.getZ());
+        Vector3 observedMovement = data.lastPosition == null ? observedDelta : new Vector3(
                 clientPosition.getX() - data.lastPosition.getX(),
                 clientPosition.getY() - data.lastPosition.getY(),
                 clientPosition.getZ() - data.lastPosition.getZ());
@@ -186,8 +185,8 @@ public final class MovementPacketProcessor {
                         input, new FrameWorldView(worldFrame, data.motion));
                 FloatVector forwarded = result.forwardedPosition();
                 packet.setPosition(Vector3f.from(forwarded.x(), forwarded.y(), forwarded.z()));
-                data.authoritativePosition = new Vec3(forwarded.x(), forwarded.y(), forwarded.z());
-                data.predictedVelocity = new Vec3(result.authoritativeVelocity().x(),
+                data.authoritativePosition = new Vector3(forwarded.x(), forwarded.y(), forwarded.z());
+                data.predictedVelocity = new Vector3(result.authoritativeVelocity().x(),
                         result.authoritativeVelocity().y(), result.authoritativeVelocity().z());
                 data.predictedOnGround = result.onGround();
                 data.predictedHorizontalCollision = data.motion.collideX()
@@ -268,16 +267,16 @@ public final class MovementPacketProcessor {
     }
 
     public void scheduleMovementCorrection(Player player, PlayerData data, boolean alert) {
-        Vec3 position = data.lastVerifiedPosition;
+        Vector3 position = data.lastVerifiedPosition;
         Location safe = data.safeLocation;
         if (position == null && safe == null) return;
         if (!data.beginMovementCorrection()) return;
-        double x = position == null ? safe.x : position.x();
+        double x = position == null ? safe.x : position.x;
         double y = position == null ? safe.y
-                : position.y() - MovementConstants.CORRECTION_HEIGHT_OFFSET;
-        double z = position == null ? safe.z : position.z();
+                : position.y - MovementConstants.CORRECTION_HEIGHT_OFFSET;
+        double z = position == null ? safe.z : position.z;
         directTeleportSetback(player, data, x, y, z, true,
-                "position=" + new Vec3(x, y, z) + " tick=" + Math.max(0, data.lastTick), alert);
+                "position=" + new Vector3(x, y, z) + " tick=" + Math.max(0, data.lastTick), alert);
     }
 
     public void trackGlideBoost(Player player, PlayerData data, InventoryTransactionPacket packet) {
@@ -361,10 +360,10 @@ public final class MovementPacketProcessor {
         } else {
             data.motion.onGround(onGround);
         }
-        data.predictedVelocity = new Vec3(velocity.getX(), velocity.getY(), velocity.getZ());
+        data.predictedVelocity = new Vector3(velocity.getX(), velocity.getY(), velocity.getZ());
         data.predictedOnGround = onGround;
         data.predictedHorizontalCollision = false;
-        data.authoritativePosition = new Vec3(position.getX(), position.getY(), position.getZ());
+        data.authoritativePosition = new Vector3(position.getX(), position.getY(), position.getZ());
         data.penetratedLastFrame = false;
         data.stuckInCollider = false;
         data.resetFall();
@@ -384,11 +383,11 @@ public final class MovementPacketProcessor {
         }
 
         if (data.phaseEntry == null) {
-            data.phaseEntry = new Vec3(accepted.getX(), accepted.getY(), accepted.getZ());
+            data.phaseEntry = new Vector3(accepted.getX(), accepted.getY(), accepted.getZ());
         }
         data.phaseFrames++;
-        double dx = accepted.getX() - data.phaseEntry.x();
-        double dz = accepted.getZ() - data.phaseEntry.z();
+        double dx = accepted.getX() - data.phaseEntry.x;
+        double dz = accepted.getZ() - data.phaseEntry.z;
         double travelled = Math.sqrt(dx * dx + dz * dz);
         if (data.phaseFrames < PHASE_MINIMUM_FRAMES || travelled < PHASE_MINIMUM_TRAVEL) {
             return;
@@ -405,14 +404,14 @@ public final class MovementPacketProcessor {
         if (data.history.latest() != null) {
             return;
         }
-        data.history.capture(player, tick, new Vec3(position.getX(), position.getY(), position.getZ()),
+        data.history.capture(player, tick, new Vector3(position.getX(), position.getY(), position.getZ()),
                 data.predictedVelocity, rotation.getY(), rotation.getX(), data.predictedOnGround,
                 data.clientWorld, data.clientEntities);
     }
 
     private void captureMovementWorldFrame(Player player, PlayerData data, long tick,
                                            Vector3f position, Vector3f rotation) {
-        data.history.capture(player, tick, new Vec3(position.getX(), position.getY(), position.getZ()),
+        data.history.capture(player, tick, new Vector3(position.getX(), position.getY(), position.getZ()),
                 data.predictedVelocity, rotation.getY(), rotation.getX(),
                 data.predictedOnGround, data.clientWorld, data.clientEntities);
     }
@@ -423,12 +422,12 @@ public final class MovementPacketProcessor {
         if (!data.beginMovementCorrection()) {
             return;
         }
-        Vec3 verified = data.lastVerifiedPosition;
+        Vector3 verified = data.lastVerifiedPosition;
         Location safe = data.safeLocation;
         FloatVector target = verified != null
-                ? new FloatVector((float) verified.x(),
-                        (float) (verified.y() - MovementConstants.CORRECTION_HEIGHT_OFFSET),
-                        (float) verified.z())
+                ? new FloatVector((float) verified.x,
+                        (float) (verified.y - MovementConstants.CORRECTION_HEIGHT_OFFSET),
+                        (float) verified.z)
                 : safe != null
                         ? new FloatVector((float) safe.x, (float) safe.y, (float) safe.z)
                         : new FloatVector((float) player.getX(), (float) player.getY(),
@@ -443,7 +442,7 @@ public final class MovementPacketProcessor {
     }
 
     private boolean inspectAirStall(PacketReceiveEvent event, Player player, PlayerData data,
-                                    MovementPipelineResult result, Vec3 observedMovement) {
+                                    MovementPipelineResult result, Vector3 observedMovement) {
         boolean exempt = plugin.settings().disabledCheck(CheckType.FLY_A.id())
                 || data.inGrace() || data.hasMovementCorrection()
                 || data.hasPendingTeleport() || data.nearServerMotionTick
@@ -454,7 +453,7 @@ public final class MovementPacketProcessor {
                 || player.isFlying() || player.isSpectator() || player.isCreative()
                 || player.getRiding() != null;
         boolean stalled = !exempt
-                && Math.abs(observedMovement.y()) <= AIR_STALL_MAXIMUM_DELTA
+                && Math.abs(observedMovement.y) <= AIR_STALL_MAXIMUM_DELTA
                 && result.authoritativeVelocity().y() <= AIR_STALL_MINIMUM_FALL_SPEED
                 && result.positionDifference().y() < -0.1f;
         if (!stalled) {
@@ -467,7 +466,7 @@ public final class MovementPacketProcessor {
 
         data.airStallBuffer = 0;
         violations.fail(event, player, data, CheckType.FLY_A, 1,
-                "air-stall dy=" + NetworkCheckSupport.format(observedMovement.y())
+                "air-stall dy=" + NetworkCheckSupport.format(observedMovement.y)
                         + " expected-vy="
                         + NetworkCheckSupport.format(result.authoritativeVelocity().y()),
                 true, false);
@@ -476,7 +475,7 @@ public final class MovementPacketProcessor {
     }
 
     private void inspectCobweb(PacketReceiveEvent event, Player player, PlayerData data,
-                               Vector3f position, Vec3 movement) {
+                               Vector3f position, Vector3 movement) {
         if (data.inGrace() || player.getAllowFlight() || player.isFlying() || player.isSpectator()
                 || player.isCreative() || player.getRiding() != null || data.hasMovementCorrection()
                 || data.hasPendingTeleport()
@@ -485,7 +484,7 @@ public final class MovementPacketProcessor {
             return;
         }
 
-        double horizontal = Math.sqrt(movement.x() * movement.x() + movement.z() * movement.z());
+        double horizontal = Math.sqrt(movement.x * movement.x + movement.z * movement.z);
         double allowed = COBWEB_MULTIPLIER * (Math.max(DEFAULT_MOVEMENT_SPEED,
                 player.getMovementSpeed()) * COBWEB_SPEED_ALLOWANCE + COBWEB_JUMP_ALLOWANCE);
         if (horizontal <= allowed) {
@@ -575,7 +574,7 @@ public final class MovementPacketProcessor {
     }
 
     private void measureMeleeKnockback(PacketReceiveEvent event, Player player, PlayerData data,
-                                       MovementPipelineResult result, Vec3 observedMovement) {
+                                       MovementPipelineResult result, Vector3 observedMovement) {
         if (data.meleeKnockbackTicks <= 0 || data.expectedMeleeKnockback == null) {
             return;
         }
@@ -586,23 +585,23 @@ public final class MovementPacketProcessor {
             return;
         }
 
-        double previousX = result.clientPosition().x() - observedMovement.x();
-        double previousZ = result.clientPosition().z() - observedMovement.z();
+        double previousX = result.clientPosition().x() - observedMovement.x;
+        double previousZ = result.clientPosition().z() - observedMovement.z;
         double predictedX = result.authoritativePosition().x() - previousX;
         double predictedZ = result.authoritativePosition().z() - previousZ;
 
         data.meleeKnockbackTicks--;
         data.meleeKnockbackExpected += Math.sqrt(predictedX * predictedX + predictedZ * predictedZ);
-        data.meleeKnockbackObserved += Math.sqrt(observedMovement.x() * observedMovement.x()
-                + observedMovement.z() * observedMovement.z());
+        data.meleeKnockbackObserved += Math.sqrt(observedMovement.x * observedMovement.x
+                + observedMovement.z * observedMovement.z);
         if (data.meleeKnockbackTicks > 0) {
             return;
         }
 
-        Vec3 expected = data.expectedMeleeKnockback;
+        Vector3 expected = data.expectedMeleeKnockback;
         data.expectedMeleeKnockback = null;
 
-        double horizontal = Math.sqrt(expected.x() * expected.x() + expected.z() * expected.z());
+        double horizontal = Math.sqrt(expected.x * expected.x + expected.z * expected.z);
         double travelled = data.meleeKnockbackExpected;
         if (travelled < 0.3) {
             return;
@@ -631,15 +630,15 @@ public final class MovementPacketProcessor {
                 false, false);
     }
 
-    private void reapplyMissingKnockback(Player player, PlayerData data, Vec3 expected,
+    private void reapplyMissingKnockback(Player player, PlayerData data, Vector3 expected,
                                          double horizontal, double missingDistance) {
         if (horizontal < 1.0E-4 || missingDistance < VELOCITY_MINIMUM_PUSH) {
             return;
         }
 
         double push = Math.min(missingDistance, VELOCITY_MAXIMUM_PUSH);
-        double x = player.getX() + expected.x() / horizontal * push;
-        double z = player.getZ() + expected.z() / horizontal * push;
+        double x = player.getX() + expected.x / horizontal * push;
+        double z = player.getZ() + expected.z / horizontal * push;
         directTeleportSetback(player, data, x, player.getY(), z, player.isOnGround(),
                 "knockback push=" + NetworkCheckSupport.format(push), false);
     }
@@ -688,7 +687,7 @@ public final class MovementPacketProcessor {
                 result.clientPosition().z());
         if (data.simulationOffsetBuffer <= 0.0 && result.onGround()
                 && MovementCheckSupport.serverGround(player, verifiedPacketPosition)) {
-            data.lastVerifiedPosition = new Vec3(result.clientPosition().x(),
+            data.lastVerifiedPosition = new Vector3(result.clientPosition().x(),
                     result.clientPosition().y() + MovementConstants.CORRECTION_HEIGHT_OFFSET,
                     result.clientPosition().z());
         }
@@ -729,7 +728,7 @@ public final class MovementPacketProcessor {
             data.resetVehicle();
             data.vehicleId = vehicle.getId();
             data.lastTick = tick;
-            data.predictedVehicleVelocity = new Vec3(vehicle.motionX, vehicle.motionY, vehicle.motionZ);
+            data.predictedVehicleVelocity = new Vector3(vehicle.motionX, vehicle.motionY, vehicle.motionZ);
             data.resetFall();
             return;
         }
@@ -753,14 +752,14 @@ public final class MovementPacketProcessor {
             data.vehicleWarmupPackets = 5;
             data.lastPosition = position;
             data.lastTick = tick;
-            data.predictedVehicleVelocity = new Vec3(vehicle.motionX, vehicle.motionY, vehicle.motionZ);
+            data.predictedVehicleVelocity = new Vector3(vehicle.motionX, vehicle.motionY, vehicle.motionZ);
             data.resetFall();
             return;
         }
         if (data.vehicleWarmupPackets > 0) {
-            Vec3 target = VehiclePositionSupport.fromPacket(vehicle, player, position);
-            Vec3 previous = VehiclePositionSupport.fromPacket(vehicle, player, data.lastPosition);
-            data.predictedVehicleVelocity = target.add(-previous.x(), -previous.y(), -previous.z());
+            Vector3 target = VehiclePositionSupport.fromPacket(vehicle, player, position);
+            Vector3 previous = VehiclePositionSupport.fromPacket(vehicle, player, data.lastPosition);
+            data.predictedVehicleVelocity = target.add(-previous.x, -previous.y, -previous.z);
             data.vehicleWarmupPackets--;
             data.lastPosition = position;
             data.lastTick = tick;
@@ -789,7 +788,7 @@ public final class MovementPacketProcessor {
             data.vehicleBuffer = Math.max(0, data.vehicleBuffer
                     - settings.vehicleBufferDecay());
             if (data.vehicleBuffer <= 0.0) {
-                data.lastVerifiedVehiclePosition = new Vec3(vehicle.x, vehicle.y, vehicle.z);
+                data.lastVerifiedVehiclePosition = new Vector3(vehicle.x, vehicle.y, vehicle.z);
             }
         }
 
@@ -805,7 +804,7 @@ public final class MovementPacketProcessor {
                     ? rotation.getY() : combatRotation.getY();
             float combatPitch = combatRotation == null || !Float.isFinite(combatRotation.getX())
                     ? rotation.getX() : combatRotation.getX();
-            data.history.capture(player, tick, new Vec3(position.getX(), position.getY(), position.getZ()),
+            data.history.capture(player, tick, new Vector3(position.getX(), position.getY(), position.getZ()),
                     result.velocity(), combatYaw, combatPitch, vehicle.isOnGround(), data.clientWorld,
                     data.clientEntities);
         }
@@ -887,25 +886,25 @@ public final class MovementPacketProcessor {
                 || insideId.contains("fence") || belowId.contains("fence");
     }
 
-    private void applyBurstCandidates(PlayerData data, Vec3 observedMovement) {
-        Vec3 pending = data.motion.hasKnockback()
-                ? new Vec3(data.motion.knockback().x(), data.motion.knockback().y(),
+    private void applyBurstCandidates(PlayerData data, Vector3 observedMovement) {
+        Vector3 pending = data.motion.hasKnockback()
+                ? new Vector3(data.motion.knockback().x(), data.motion.knockback().y(),
                         data.motion.knockback().z())
                 : null;
 
-        Vec3 best = null;
+        Vector3 best = null;
         boolean bestIsRiptide = false;
         boolean riptideGroundStep = false;
         double bestDistance = BURST_MATCH_DISTANCE;
 
-        List<Vec3> candidates = new ArrayList<>(data.windChargeCandidates());
-        Vec3 lunge = data.spearLungeCandidate();
+        List<Vector3> candidates = new ArrayList<>(data.windChargeCandidates());
+        Vector3 lunge = data.spearLungeCandidate();
         if (lunge != null) {
             candidates.add(lunge);
         }
-        List<Vec3> riptide = data.riptideCandidates();
+        List<Vector3> riptide = data.riptideCandidates();
 
-        for (Vec3 candidate : candidates) {
+        for (Vector3 candidate : candidates) {
             double distance = candidate.distance(observedMovement);
             if (distance < bestDistance) {
                 bestDistance = distance;
@@ -915,7 +914,7 @@ public final class MovementPacketProcessor {
             if (pending == null) {
                 continue;
             }
-            Vec3 combined = candidate.add(pending.x(), pending.y(), pending.z());
+            Vector3 combined = candidate.add(pending.x, pending.y, pending.z);
             double combinedDistance = combined.distance(observedMovement);
             if (combinedDistance < bestDistance) {
                 bestDistance = combinedDistance;
@@ -925,8 +924,8 @@ public final class MovementPacketProcessor {
         }
 
         boolean groundStep = data.riptideGroundStep();
-        for (Vec3 candidate : riptide) {
-            Vec3 movement = groundStep ? candidate.add(0.0, 1.0, 0.0) : candidate;
+        for (Vector3 candidate : riptide) {
+            Vector3 movement = groundStep ? candidate.add(0.0, 1.0, 0.0) : candidate;
             double distance = movement.distance(observedMovement);
             if (distance < bestDistance) {
                 bestDistance = distance;
@@ -942,8 +941,8 @@ public final class MovementPacketProcessor {
                 riptideGroundStep = false;
             }
             if (pending == null) continue;
-            Vec3 combinedVelocity = candidate.add(pending);
-            Vec3 combinedMovement = groundStep
+            Vector3 combinedVelocity = candidate.add(pending);
+            Vector3 combinedMovement = groundStep
                     ? combinedVelocity.add(0.0, 1.0, 0.0) : combinedVelocity;
             double combinedDistance = combinedMovement.distance(observedMovement);
             if (combinedDistance < bestDistance) {
@@ -958,8 +957,8 @@ public final class MovementPacketProcessor {
             return;
         }
 
-        data.motion.knockback(new FloatVector((float) best.x(), (float) best.y(),
-                (float) best.z()));
+        data.motion.knockback(new FloatVector((float) best.x, (float) best.y,
+                (float) best.z));
         if (bestIsRiptide) {
             data.motion.startRiptide(riptideGroundStep);
             data.clearRiptideCandidates();
@@ -969,7 +968,7 @@ public final class MovementPacketProcessor {
     }
 
     private void scheduleVehicleCorrection(Player player, PlayerData data, Entity vehicle) {
-        Vec3 target = data.lastVerifiedVehiclePosition;
+        Vector3 target = data.lastVerifiedVehiclePosition;
         if (target == null || !data.beginMovementCorrection()) {
             return;
         }
@@ -980,9 +979,9 @@ public final class MovementPacketProcessor {
                 return;
             }
             vehicle.setMotion(new Vector3(0, 0, 0));
-            vehicle.teleport(new Location(target.x(), target.y(), target.z(),
+            vehicle.teleport(new Location(target.x, target.y, target.z,
                     vehicle.yaw, vehicle.pitch, vehicle.getLevel()));
-            data.predictedVehicleVelocity = Vec3.ZERO;
+            data.predictedVehicleVelocity = Vector3.ZERO;
             data.vehicleWarmupPackets = 5;
         });
     }
@@ -1010,7 +1009,7 @@ public final class MovementPacketProcessor {
             data.clearVelocities();
             data.motion.clearTransientMotion();
             data.motion.onGround(onGround);
-            data.predictedVelocity = Vec3.ZERO;
+            data.predictedVelocity = Vector3.ZERO;
             data.predictedOnGround = onGround;
             data.predictedHorizontalCollision = false;
             data.penetratedLastFrame = false;

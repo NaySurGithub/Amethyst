@@ -1,6 +1,6 @@
 package nay.amethyst.history.model;
 
-import nay.amethyst.prediction.common.Vec3;
+import org.powernukkitx.math.Vector3;
 import org.powernukkitx.math.AxisAlignedBB;
 
 public record Aabb(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
@@ -14,14 +14,14 @@ public record Aabb(double minX, double minY, double minZ, double maxX, double ma
         return new Aabb(minX + x, minY + y, minZ + z, maxX + x, maxY + y, maxZ + z);
     }
 
-    public Aabb stretch(Vec3 movement) {
+    public Aabb stretch(Vector3 movement) {
         return new Aabb(
-                movement.x() < 0 ? minX + movement.x() : minX,
-                movement.y() < 0 ? minY + movement.y() : minY,
-                movement.z() < 0 ? minZ + movement.z() : minZ,
-                movement.x() > 0 ? maxX + movement.x() : maxX,
-                movement.y() > 0 ? maxY + movement.y() : maxY,
-                movement.z() > 0 ? maxZ + movement.z() : maxZ);
+                movement.x < 0 ? minX + movement.x : minX,
+                movement.y < 0 ? minY + movement.y : minY,
+                movement.z < 0 ? minZ + movement.z : minZ,
+                movement.x > 0 ? maxX + movement.x : maxX,
+                movement.y > 0 ? maxY + movement.y : maxY,
+                movement.z > 0 ? maxZ + movement.z : maxZ);
     }
 
     public Aabb expand(double amount) {
@@ -69,11 +69,11 @@ public record Aabb(double minX, double minY, double minZ, double maxX, double ma
         return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
-    public double rayDistance(Vec3 origin, Vec3 direction, double maximum) {
+    public double rayDistance(Vector3 origin, Vector3 direction, double maximum) {
         double near = 0;
         double far = maximum;
-        double[] origins = {origin.x(), origin.y(), origin.z()};
-        double[] directions = {direction.x(), direction.y(), direction.z()};
+        double[] origins = {origin.x, origin.y, origin.z};
+        double[] directions = {direction.x, direction.y, direction.z};
         double[] minima = {minX, minY, minZ};
         double[] maxima = {maxX, maxY, maxZ};
         for (int axis = 0; axis < 3; axis++) {

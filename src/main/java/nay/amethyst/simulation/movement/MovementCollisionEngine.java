@@ -76,6 +76,30 @@ public final class MovementCollisionEngine {
         updateSupportingBlock(state, world, requested);
     }
 
+    public static BoxCollision collide(FloatBox box, FloatVector requested, boolean wasOnGround,
+                                       List<FloatBox> collisions) {
+        Resolution collision = resolve(box, requested, collisions, false);
+        FloatVector resolved = collision.movement();
+        boolean mayStep = wasOnGround || requested.y() != resolved.y() && requested.y() < 0.0f;
+        if (mayStep && (requested.x() != resolved.x() || requested.z() != resolved.z())) {
+            Resolution step = autoStep(box, requested, collisions, false);
+            boolean stepBlocked = false;
+            for (FloatBox other : collisions) {
+                if (step.box().intersects(other)) {
+                    stepBlocked = true;
+                    break;
+                }
+            }
+            if (!stepBlocked && resolved.horizontalLengthSquared() < step.movement().horizontalLengthSquared()) {
+                resolved = step.movement();
+            }
+        }
+        boolean horizontal = Math.abs(requested.x() - resolved.x()) >= COLLISION_EPSILON
+                || Math.abs(requested.z() - resolved.z()) >= COLLISION_EPSILON;
+        boolean vertical = Math.abs(requested.y() - resolved.y()) >= COLLISION_EPSILON;
+        return new BoxCollision(resolved, horizontal, vertical);
+    }
+
     private static Resolution resolve(FloatBox original, FloatVector movement,
                                       List<FloatBox> collisions, boolean oneWay) {
         FloatBox box = original;
@@ -273,6 +297,10 @@ public final class MovementCollisionEngine {
 
     private static int floor(float value) {
         return (int) Math.floor(value);
+    }
+
+    public record BoxCollision(FloatVector movement, boolean horizontalCollision,
+                               boolean verticalCollision) {
     }
 
     private record Resolution(FloatBox box, FloatVector movement,

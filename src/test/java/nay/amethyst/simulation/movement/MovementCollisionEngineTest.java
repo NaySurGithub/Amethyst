@@ -88,6 +88,57 @@ public final class MovementCollisionEngineTest {
         assertTrue(state.stuckInCollider());
     }
 
+    @Test
+    void collide_boxAgainstWall_stopsAndReportsHorizontalCollision() {
+        FloatBox boat = new FloatBox(-0.7f, 10.0f, -0.7f, 0.7f, 10.45f, 0.7f);
+        FloatBox wall = new FloatBox(1.0f, 9.0f, -2.0f, 2.0f, 12.0f, 2.0f);
+
+        MovementCollisionEngine.BoxCollision result = MovementCollisionEngine.collide(boat,
+                new FloatVector(0.5f, 0.0f, 0.0f), false, List.of(wall));
+
+        assertEquals(0.3f, result.movement().x(), DELTA);
+        assertTrue(result.horizontalCollision());
+        assertFalse(result.verticalCollision());
+    }
+
+    @Test
+    void collide_boxFallingOntoFloor_landsAndReportsVerticalCollision() {
+        FloatBox boat = new FloatBox(-0.7f, 10.0f, -0.7f, 0.7f, 10.45f, 0.7f);
+        FloatBox floor = new FloatBox(-2.0f, 8.0f, -2.0f, 2.0f, 9.5f, 2.0f);
+
+        MovementCollisionEngine.BoxCollision result = MovementCollisionEngine.collide(boat,
+                new FloatVector(0.0f, -1.0f, 0.0f), false, List.of(floor));
+
+        assertEquals(-0.5f, result.movement().y(), DELTA);
+        assertTrue(result.verticalCollision());
+        assertFalse(result.horizontalCollision());
+    }
+
+    @Test
+    void collide_groundedBoxAgainstLowStep_climbsIt() {
+        FloatBox mount = new FloatBox(-0.7f, 10.0f, -0.7f, 0.7f, 11.6f, 0.7f);
+        FloatBox floor = new FloatBox(-3.0f, 9.0f, -3.0f, 3.0f, 10.0f, 3.0f);
+        FloatBox step = new FloatBox(0.8f, 10.0f, -3.0f, 3.0f, 10.5f, 3.0f);
+
+        MovementCollisionEngine.BoxCollision result = MovementCollisionEngine.collide(mount,
+                new FloatVector(0.4f, 0.0f, 0.0f), true, List.of(floor, step));
+
+        assertEquals(0.4f, result.movement().x(), DELTA);
+        assertEquals(0.5f, result.movement().y(), DELTA);
+    }
+
+    @Test
+    void collide_airborneBoxAgainstLowStep_doesNotClimb() {
+        FloatBox mount = new FloatBox(-0.7f, 10.0f, -0.7f, 0.7f, 11.6f, 0.7f);
+        FloatBox step = new FloatBox(0.8f, 10.0f, -3.0f, 3.0f, 10.5f, 3.0f);
+
+        MovementCollisionEngine.BoxCollision result = MovementCollisionEngine.collide(mount,
+                new FloatVector(0.4f, 0.0f, 0.0f), false, List.of(step));
+
+        assertEquals(0.1f, result.movement().x(), DELTA);
+        assertEquals(0.0f, result.movement().y(), DELTA);
+    }
+
     private static final class FixedCollisionWorld implements MovementWorldView {
         private final List<FloatBox> boxes;
 

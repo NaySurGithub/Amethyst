@@ -1,6 +1,6 @@
 package nay.amethyst.packet.movement;
 
-import nay.amethyst.prediction.common.Vec3;
+import org.powernukkitx.math.Vector3;
 import org.cloudburstmc.math.vector.Vector3f;
 import org.cloudburstmc.protocol.bedrock.data.PlayerAuthInputData;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerAuthInputPacket;
@@ -9,8 +9,8 @@ import java.util.Set;
 
 public record MovementPacketSnapshot(
         long clientTick,
-        Vec3 position,
-        Vec3 reportedDelta,
+        Vector3 position,
+        Vector3 reportedDelta,
         float pitch,
         float yaw,
         float headYaw,
@@ -37,8 +37,8 @@ public record MovementPacketSnapshot(
         return inputFlags.contains(flag);
     }
 
-    private static Vec3 vector(Vector3f value) {
-        if (value == null) return new Vec3(Double.NaN, Double.NaN, Double.NaN);
-        return new Vec3(value.getX(), value.getY(), value.getZ());
+    private static Vector3 vector(Vector3f value) {
+        if (value == null) return new Vector3(Double.NaN, Double.NaN, Double.NaN);
+        return new Vector3(value.getX(), value.getY(), value.getZ());
     }
 }

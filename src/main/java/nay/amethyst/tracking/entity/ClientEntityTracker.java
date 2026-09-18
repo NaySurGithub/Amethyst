@@ -1,6 +1,6 @@
 package nay.amethyst.tracking.entity;
 
-import nay.amethyst.prediction.common.Vec3;
+import org.powernukkitx.math.Vector3;
 import nay.amethyst.history.model.Aabb;
 import nay.amethyst.history.model.EntityFrame;
 import org.cloudburstmc.math.vector.Vector3f;
@@ -34,7 +34,7 @@ public final class ClientEntityTracker {
     public synchronized void add(long runtimeId, Vector3f position, boolean player,
                                  ActorDataMap actorData, String identifier, boolean projectile) {
         if (position == null) return;
-        Vec3 converted = vector(position);
+        Vector3 converted = vector(position);
         removedProjectiles.remove(runtimeId);
         entities.put(runtimeId, new TrackedEntity(runtimeId, converted, player,
                 value(actorData, ActorDataTypes.WIDTH, 0.6f),
@@ -70,7 +70,7 @@ public final class ClientEntityTracker {
     public synchronized boolean queueAbsolute(long runtimeId, Vector3f position, boolean teleport) {
         TrackedEntity entity = entities.get(runtimeId);
         if (entity == null || position == null) return false;
-        Vec3 converted = vector(position);
+        Vector3 converted = vector(position);
         if (entity.player) converted = converted.add(0, -PLAYER_HEIGHT_OFFSET, 0);
         entity.serverPosition = converted;
         queuedUpdates.add(new PositionUpdate(runtimeId, converted, teleport));
@@ -95,10 +95,10 @@ public final class ClientEntityTracker {
     public synchronized boolean queueDelta(long runtimeId, Float x, Float y, Float z, boolean teleport) {
         TrackedEntity entity = entities.get(runtimeId);
         if (entity == null) return false;
-        Vec3 previous = entity.serverPosition;
-        Vec3 position = new Vec3(x == null ? previous.x() : x,
-                y == null ? previous.y() : y, z == null ? previous.z() : z);
-        return queueAbsolute(runtimeId, Vector3f.from(position.x(), position.y(), position.z()), teleport);
+        Vector3 previous = entity.serverPosition;
+        Vector3 position = new Vector3(x == null ? previous.x : x,
+                y == null ? previous.y : y, z == null ? previous.z : z);
+        return queueAbsolute(runtimeId, Vector3f.from(position.x, position.y, position.z), teleport);
     }
 
     public synchronized List<Update> drainQueuedUpdates() {
@@ -150,18 +150,18 @@ public final class ClientEntityTracker {
                 entity.width, entity.height, entity.scale);
     }
 
-    public synchronized Map<Long, EntityFrame> snapshotFrames(Vec3 center, double radius) {
+    public synchronized Map<Long, EntityFrame> snapshotFrames(Vector3 center, double radius) {
         double radiusSquared = radius * radius;
         Map<Long, EntityFrame> snapshot = new HashMap<>();
         for (TrackedEntity entity : entities.values()) {
-            if (entity.position == null || entity.position.add(-center.x(), -center.y(), -center.z()).lengthSquared()
+            if (entity.position == null || entity.position.add(-center.x, -center.y, -center.z).lengthSquared()
                     > radiusSquared) continue;
             double halfWidth = entity.width * entity.scale / 2.0;
             double height = entity.height * entity.scale;
             snapshot.put(entity.runtimeId, new EntityFrame(entity.runtimeId,
-                    new Aabb(entity.position.x() - halfWidth, entity.position.y(),
-                            entity.position.z() - halfWidth, entity.position.x() + halfWidth,
-                            entity.position.y() + height, entity.position.z() + halfWidth),
+                    new Aabb(entity.position.x - halfWidth, entity.position.y,
+                            entity.position.z - halfWidth, entity.position.x + halfWidth,
+                            entity.position.y + height, entity.position.z + halfWidth),
                     entity.solid));
         }
         return snapshot;
@@ -178,8 +178,8 @@ public final class ClientEntityTracker {
         flushScheduled = false;
     }
 
-    private static Vec3 vector(Vector3f position) {
-        return new Vec3(position.getX(), position.getY(), position.getZ());
+    private static Vector3 vector(Vector3f position) {
+        return new Vector3(position.getX(), position.getY(), position.getZ());
     }
 
     private static float value(ActorDataMap data,
@@ -201,7 +201,7 @@ public final class ClientEntityTracker {
     public record RemoveUpdate(long runtimeId) implements Update {
     }
 
-    public record PositionUpdate(long runtimeId, Vec3 position, boolean teleport) implements Update {
+    public record PositionUpdate(long runtimeId, Vector3 position, boolean teleport) implements Update {
     }
 
     public record SizeUpdate(long runtimeId, Float width, Float height, Float scale) implements Update {
@@ -210,10 +210,10 @@ public final class ClientEntityTracker {
     private static final class TrackedEntity {
         private final long runtimeId;
         private final boolean player;
-        private Vec3 previousPosition;
-        private Vec3 position;
-        private Vec3 receivedPosition;
-        private Vec3 serverPosition;
+        private Vector3 previousPosition;
+        private Vector3 position;
+        private Vector3 receivedPosition;
+        private Vector3 serverPosition;
         private int interpolationTicks;
         private int ticksSinceTeleport;
         private double width;
@@ -222,7 +222,7 @@ public final class ClientEntityTracker {
         private final boolean solid;
         private final boolean projectile;
 
-        private TrackedEntity(long runtimeId, Vec3 position, boolean player,
+        private TrackedEntity(long runtimeId, Vector3 position, boolean player,
                               double width, double height, double scale, boolean solid, boolean projectile) {
             this.runtimeId = runtimeId;
             this.player = player;
@@ -237,7 +237,7 @@ public final class ClientEntityTracker {
             this.projectile = projectile;
         }
 
-        private void receive(Vec3 received, boolean teleport) {
+        private void receive(Vector3 received, boolean teleport) {
             receivedPosition = received;
             interpolationTicks = teleport ? 1 : player ? 3 : 6;
             if (teleport) ticksSinceTeleport = 0;
@@ -247,9 +247,9 @@ public final class ClientEntityTracker {
             previousPosition = position;
             if (interpolationTicks > 0) {
                 double scale = 1.0 / interpolationTicks;
-                position = position.add((receivedPosition.x() - position.x()) * scale,
-                        (receivedPosition.y() - position.y()) * scale,
-                        (receivedPosition.z() - position.z()) * scale);
+                position = position.add((receivedPosition.x - position.x) * scale,
+                        (receivedPosition.y - position.y) * scale,
+                        (receivedPosition.z - position.z) * scale);
                 interpolationTicks--;
             } else {
                 position = receivedPosition;

@@ -47,7 +47,7 @@ public final class InventoryMoveCheck {
         if (data.lastPosition == null || position == null) return 0;
         double actual = Math.hypot(position.getX() - data.lastPosition.getX(),
                 position.getZ() - data.lastPosition.getZ());
-        double passive = data.predictedVelocity == null ? 0 : data.predictedVelocity.horizontalLength();
+        double passive = data.predictedVelocity == null ? 0 : Math.hypot(data.predictedVelocity.x, data.predictedVelocity.z);
         return Math.max(0, actual - passive - 0.03);
     }
 

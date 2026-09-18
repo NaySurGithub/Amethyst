@@ -1,7 +1,7 @@
 package nay.amethyst.packet.movement;
 
 import nay.amethyst.check.type.CheckType;
-import nay.amethyst.prediction.common.Vec3;
+import org.powernukkitx.math.Vector3;
 
 
 public final class MovementPreValidator {
@@ -64,9 +64,9 @@ public final class MovementPreValidator {
         if (snapshot.clientTick() != 0) sawNonZeroTick = true;
     }
 
-    private static boolean finite(Vec3 value) {
-        return Double.isFinite(value.x()) && Double.isFinite(value.y())
-                && Double.isFinite(value.z());
+    private static boolean finite(Vector3 value) {
+        return Double.isFinite(value.x) && Double.isFinite(value.y)
+                && Double.isFinite(value.z);
     }
 
 }

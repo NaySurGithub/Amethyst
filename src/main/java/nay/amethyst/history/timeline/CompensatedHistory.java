@@ -8,7 +8,6 @@ import nay.amethyst.history.model.EntityFrame;
 import nay.amethyst.history.model.PhysicsFrame;
 import nay.amethyst.history.model.StairShapes;
 import nay.amethyst.history.model.WorldFrame;
-import nay.amethyst.prediction.common.Vec3;
 import nay.amethyst.tracking.world.ClientWorldTracker;
 import nay.amethyst.tracking.entity.ClientEntityTracker;
 import org.powernukkitx.Player;
@@ -43,13 +42,13 @@ public final class CompensatedHistory {
     private BlockIndex cachedIndex = BlockIndex.EMPTY;
     private List<Aabb> cachedCollisions = List.of();
 
-    public synchronized void capture(Player player, long clientTick, Vec3 position, Vec3 velocity,
+    public synchronized void capture(Player player, long clientTick, Vector3 position, Vector3 velocity,
                                      float yaw, float pitch, boolean onGround, ClientWorldTracker clientWorld,
                                      ClientEntityTracker clientEntities) {
-        double feet = position.y() - player.getBaseOffset();
-        int centerX = floor(position.x());
+        double feet = position.y - player.getBaseOffset();
+        int centerX = floor(position.x);
         int centerY = floor(feet);
-        int centerZ = floor(position.z());
+        int centerZ = floor(position.z);
         long worldRevision = clientWorld.revision();
         String levelName = player.getLevel().getName();
         boolean areaChanged = !levelName.equals(cachedLevel) || centerX != cachedX || centerY != cachedY

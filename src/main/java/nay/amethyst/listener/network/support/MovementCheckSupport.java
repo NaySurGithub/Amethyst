@@ -6,7 +6,7 @@ import nay.amethyst.history.model.Aabb;
 import nay.amethyst.history.model.BlockFrame;
 import nay.amethyst.history.model.BlockPos;
 import nay.amethyst.history.model.WorldFrame;
-import nay.amethyst.prediction.common.Vec3;
+import org.powernukkitx.math.Vector3;
 import org.cloudburstmc.math.vector.Vector3f;
 import org.powernukkitx.Player;
 import org.powernukkitx.block.BlockFenceGate;

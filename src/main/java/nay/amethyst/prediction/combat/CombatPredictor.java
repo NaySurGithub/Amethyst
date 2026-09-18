@@ -5,7 +5,7 @@ import nay.amethyst.history.model.Aabb;
 import nay.amethyst.history.model.EntityFrame;
 import nay.amethyst.history.model.WorldFrame;
 import nay.amethyst.listener.network.support.NetworkCheckSupport;
-import nay.amethyst.prediction.common.Vec3;
+import org.powernukkitx.math.Vector3;
 import nay.amethyst.tracking.entity.ClientEntityView;
 import org.powernukkitx.Player;
 import org.powernukkitx.entity.Entity;
@@ -45,7 +45,7 @@ public final class CombatPredictor {
 
             for (int step = 0; step <= lerpSteps; step++) {
                 double partial = step / (double) lerpSteps;
-                Vec3 eye = lerpEye(start, end, partial);
+                Vector3 eye = lerpEye(start, end, partial);
                 float yaw = lerpAngle(start.yaw(), end.yaw(), partial);
                 float pitch = (float) lerp(start.pitch(), end.pitch(), partial);
                 Aabb box = lerp(startEntity.box(), endEntity.box(), partial).expand(boxExpansion);
@@ -57,8 +57,8 @@ public final class CombatPredictor {
         }
 
         WorldFrame latest = data.history.latest();
-        Vec3 eye = currentEye(player, data, latest);
-        Vec3 direction = latest == null ? look((float) player.yaw, (float) player.pitch)
+        Vector3 eye = currentEye(player, data, latest);
+        Vector3 direction = latest == null ? look((float) player.yaw, (float) player.pitch)
                 : look(latest.yaw(), latest.pitch());
         Candidate current = trace(eye, direction,
                 Aabb.from(target.getBoundingBox()).expand(boxExpansion), reachLeniency,
@@ -79,12 +79,12 @@ public final class CombatPredictor {
 
         for (int step = 0; step <= lerpSteps; step++) {
             double partial = step / (double) lerpSteps;
-            Vec3 eye = lerpEye(start, end, partial);
+            Vector3 eye = lerpEye(start, end, partial);
             float yaw = lerpAngle(start.yaw(), end.yaw(), partial);
             float pitch = (float) lerp(start.pitch(), end.pitch(), partial);
-            Vec3 position = lerp(entity.previousPosition(), entity.position(), partial);
-            Aabb box = new Aabb(position.x() - halfX, position.y(), position.z() - halfZ,
-                    position.x() + halfX, position.y() + height, position.z() + halfZ).expand(boxExpansion);
+            Vector3 position = lerp(entity.previousPosition(), entity.position(), partial);
+            Aabb box = new Aabb(position.x - halfX, position.y, position.z - halfZ,
+                    position.x + halfX, position.y + height, position.z + halfZ).expand(boxExpansion);
             Candidate candidate = trace(eye, look(yaw, pitch), box, reachLeniency,
                     maximumAttackAngle, 0, 0, rawDistanceFallback);
             best = better(best, candidate);
@@ -93,11 +93,11 @@ public final class CombatPredictor {
         return best;
     }
 
-    private static Candidate trace(Vec3 eye, Vec3 direction, Aabb box,
+    private static Candidate trace(Vector3 eye, Vector3 direction, Aabb box,
                                    double reachLeniency, double maximumAttackAngle,
                                    double closeRangeFallback, double closeRangeAngle,
                                    boolean rawDistanceFallback) {
-        double raw = box.distanceTo(eye.x(), eye.y(), eye.z());
+        double raw = box.distanceTo(eye.x, eye.y, eye.z);
         double angle = angleToBox(eye, direction, box);
         double ray = box.rayDistance(eye, direction, TRACE_LENGTH);
         boolean raycastHit = Double.isFinite(ray);
@@ -123,25 +123,25 @@ public final class CombatPredictor {
         return second.angle < first.angle ? second : first;
     }
 
-    private static Vec3 lerpEye(WorldFrame start, WorldFrame end, double partial) {
-        Vec3 startEye = start.position().add(0,
+    private static Vector3 lerpEye(WorldFrame start, WorldFrame end, double partial) {
+        Vector3 startEye = start.position().add(0,
                 -start.physics().baseOffset() + start.physics().eyeHeight(), 0);
-        Vec3 endEye = end.position().add(0,
+        Vector3 endEye = end.position().add(0,
                 -end.physics().baseOffset() + end.physics().eyeHeight(), 0);
         return lerp(startEye, endEye, partial);
     }
 
-    private static Vec3 currentEye(Player player, PlayerData data, WorldFrame latest) {
+    private static Vector3 currentEye(Player player, PlayerData data, WorldFrame latest) {
         if (latest != null) {
             return latest.position().add(0,
                     -latest.physics().baseOffset() + latest.physics().eyeHeight(), 0);
         }
         if (data.lastPosition != null) {
-            return new Vec3(data.lastPosition.getX(),
+            return new Vector3(data.lastPosition.getX(),
                     data.lastPosition.getY() - player.getBaseOffset() + player.getEyeHeight(),
                     data.lastPosition.getZ());
         }
-        return new Vec3(player.x, player.y + player.getEyeHeight(), player.z);
+        return new Vector3(player.x, player.y + player.getEyeHeight(), player.z);
     }
 
     private static Aabb lerp(Aabb start, Aabb end, double partial) {
@@ -150,9 +150,9 @@ public final class CombatPredictor {
                 lerp(start.maxY(), end.maxY(), partial), lerp(start.maxZ(), end.maxZ(), partial));
     }
 
-    private static Vec3 lerp(Vec3 start, Vec3 end, double partial) {
-        return new Vec3(lerp(start.x(), end.x(), partial), lerp(start.y(), end.y(), partial),
-                lerp(start.z(), end.z(), partial));
+    private static Vector3 lerp(Vector3 start, Vector3 end, double partial) {
+        return new Vector3(lerp(start.x, end.x, partial), lerp(start.y, end.y, partial),
+                lerp(start.z, end.z, partial));
     }
 
     private static double lerp(double start, double end, double partial) {
@@ -164,21 +164,21 @@ public final class CombatPredictor {
         return (float) (start + delta * partial);
     }
 
-    private static double angleToBox(Vec3 origin, Vec3 direction, Aabb box) {
-        double x = clamp(origin.x(), box.minX(), box.maxX()) - origin.x();
-        double y = clamp(origin.y(), box.minY(), box.maxY()) - origin.y();
-        double z = clamp(origin.z(), box.minZ(), box.maxZ()) - origin.z();
+    private static double angleToBox(Vector3 origin, Vector3 direction, Aabb box) {
+        double x = clamp(origin.x, box.minX(), box.maxX()) - origin.x;
+        double y = clamp(origin.y, box.minY(), box.maxY()) - origin.y;
+        double z = clamp(origin.z, box.minZ(), box.maxZ()) - origin.z;
         double length = Math.sqrt(x * x + y * y + z * z);
         if (length < 1.0E-9) return 0;
-        double dot = (direction.x() * x + direction.y() * y + direction.z() * z) / length;
+        double dot = (direction.x * x + direction.y * y + direction.z * z) / length;
         return Math.toDegrees(Math.acos(clamp(dot, -1, 1)));
     }
 
-    private static Vec3 look(float yaw, float pitch) {
+    private static Vector3 look(float yaw, float pitch) {
         double yawRadians = Math.toRadians(yaw);
         double pitchRadians = Math.toRadians(pitch);
         double cosine = Math.cos(pitchRadians);
-        return new Vec3(-Math.sin(yawRadians) * cosine, -Math.sin(pitchRadians),
+        return new Vector3(-Math.sin(yawRadians) * cosine, -Math.sin(pitchRadians),
                 Math.cos(yawRadians) * cosine);
     }
 

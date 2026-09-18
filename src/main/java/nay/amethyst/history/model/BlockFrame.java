@@ -1,6 +1,6 @@
 package nay.amethyst.history.model;
 
-import nay.amethyst.prediction.common.Vec3;
+import org.powernukkitx.math.Vector3;
 import org.powernukkitx.block.Block;
 import org.powernukkitx.block.BlockBubbleColumn;
 import org.powernukkitx.block.BlockFenceGate;
@@ -18,7 +18,7 @@ public record BlockFrame(
         boolean lava,
         boolean climbable,
         double fluidHeight,
-        Vec3 flow,
+        Vector3 flow,
         int bubbleDirection,
         List<Aabb> collisions,
         StairFrame stair
@@ -30,7 +30,7 @@ public record BlockFrame(
     }
 
     private static final BlockFrame AIR = new BlockFrame("minecraft:air", 0.6, false, false, false,
-            0, Vec3.ZERO, 0, List.of(), null);
+            0, Vector3.ZERO, 0, List.of(), null);
 
     public static BlockFrame capture(Block block) {
         if (block.isAir()) {
@@ -54,11 +54,11 @@ public record BlockFrame(
         boolean water = block.getId().contains("water") || block instanceof BlockBubbleColumn;
         boolean lava = block.getId().contains("lava");
         double fluidHeight = 0;
-        Vec3 flow = Vec3.ZERO;
+        Vector3 flow = Vector3.ZERO;
         if (block instanceof BlockLiquid liquid) {
             fluidHeight = 1.0 - liquid.getFluidHeightPercent();
             var vector = liquid.getFlowVector();
-            flow = new Vec3(vector.x, vector.y, vector.z);
+            flow = new Vector3(vector.x, vector.y, vector.z);
         } else if (block instanceof BlockBubbleColumn) {
             fluidHeight = 1;
         }
