@@ -24,6 +24,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Replaces containers the player has no line of sight to with a plain block, so a client that draws
@@ -36,6 +37,9 @@ public final class ContainerConcealer {
     private static final double SURFACE_INSET = 0.02;
     private static final int COORDINATE_BITS = 26;
     private static final int HEIGHT_OFFSET = 2048;
+    private static final int MAX_IDLE_PASSES = 5;
+    private static final double STILL_EYE_SQUARED = 1.0E-4;
+    private static final int MAX_TRACKED_CHANGES = 65_536;
 
     /**
      * The five points aimed at on each face, as offsets inside the block: its middle and its four
@@ -55,6 +59,9 @@ public final class ContainerConcealer {
 
     private final Map<UUID, PlayerView> views = new ConcurrentHashMap<>();
     private final Map<ChunkKey, long[]> chunkIndex = new ConcurrentHashMap<>();
+    private final Map<ChunkKey, Long> chunkChanges = new ConcurrentHashMap<>();
+    private final AtomicLong changeCounter = new AtomicLong();
+    private volatile long changesResetAt;
     private volatile AmethystSettings indexedWith;
 
     /**
@@ -81,9 +88,53 @@ public final class ContainerConcealer {
             if (view.levelId != level.getId()) {
                 view.concealed.clear();
                 view.levelId = level.getId();
+                view.dirty = true;
             }
+            double eyeX = player.getX();
+            double eyeY = player.getY() + player.getEyeHeight();
+            double eyeZ = player.getZ();
+            if (unchanged(view, level, player, settings, eyeX, eyeY, eyeZ)) {
+                view.idlePasses++;
+                return;
+            }
+            long stamp = changeCounter.get();
             scan(player, level, view, settings);
+            view.eyeX = eyeX;
+            view.eyeY = eyeY;
+            view.eyeZ = eyeZ;
+            view.scannedAt = stamp;
+            view.scannedWith = settings;
+            view.idlePasses = 0;
+            view.dirty = false;
         }
+    }
+
+    private boolean unchanged(PlayerView view, Level level, Player player, AmethystSettings settings,
+                              double eyeX, double eyeY, double eyeZ) {
+        if (view.dirty || view.scannedWith != settings || view.idlePasses >= MAX_IDLE_PASSES
+                || view.scannedAt < changesResetAt) {
+            return false;
+        }
+        double dx = eyeX - view.eyeX;
+        double dy = eyeY - view.eyeY;
+        double dz = eyeZ - view.eyeZ;
+        if (dx * dx + dy * dy + dz * dz > STILL_EYE_SQUARED) {
+            return false;
+        }
+        int radius = settings.concealRadius();
+        int minChunkX = (player.getFloorX() - radius) >> 4;
+        int maxChunkX = (player.getFloorX() + radius) >> 4;
+        int minChunkZ = (player.getFloorZ() - radius) >> 4;
+        int maxChunkZ = (player.getFloorZ() + radius) >> 4;
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                Long changedAt = chunkChanges.get(new ChunkKey(level.getId(), chunkX, chunkZ));
+                if (changedAt != null && changedAt > view.scannedAt) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private void scan(Player player, Level level, PlayerView view, AmethystSettings settings) {
@@ -152,6 +203,7 @@ public final class ContainerConcealer {
             return;
         }
         view.concealed.removeIf(key -> (unpackX(key) >> 4) == chunkX && (unpackZ(key) >> 4) == chunkZ);
+        view.dirty = true;
     }
 
     /**
@@ -178,6 +230,7 @@ public final class ContainerConcealer {
     public void clear() {
         views.clear();
         chunkIndex.clear();
+        chunkChanges.clear();
     }
 
     private static boolean withinRange(Player player, int x, int y, int z, double nearSquared) {
@@ -245,7 +298,14 @@ public final class ContainerConcealer {
      */
     public void invalidate(Level level, int x, int z) {
         if (level != null) {
-            chunkIndex.remove(new ChunkKey(level.getId(), x >> 4, z >> 4));
+            ChunkKey chunkKey = new ChunkKey(level.getId(), x >> 4, z >> 4);
+            chunkIndex.remove(chunkKey);
+            long stamp = changeCounter.incrementAndGet();
+            if (chunkChanges.size() >= MAX_TRACKED_CHANGES) {
+                chunkChanges.clear();
+                changesResetAt = stamp;
+            }
+            chunkChanges.put(chunkKey, stamp);
         }
     }
 
@@ -505,5 +565,12 @@ public final class ContainerConcealer {
         private final Set<Long> concealed = ConcurrentHashMap.newKeySet();
         private int levelId = Integer.MIN_VALUE;
         private boolean closed;
+        private volatile boolean dirty = true;
+        private double eyeX;
+        private double eyeY;
+        private double eyeZ;
+        private long scannedAt = -1;
+        private int idlePasses;
+        private AmethystSettings scannedWith;
     }
 }
