@@ -183,7 +183,7 @@ public final class MovementPacketProcessor {
             } else {
                 boolean previousGround = data.predictedOnGround;
                 MovementPipelineResult result = data.movementPipeline.handle(
-                        input, new FrameWorldView(worldFrame));
+                        input, new FrameWorldView(worldFrame, data.motion));
                 FloatVector forwarded = result.forwardedPosition();
                 packet.setPosition(Vector3f.from(forwarded.x(), forwarded.y(), forwarded.z()));
                 data.authoritativePosition = new Vec3(forwarded.x(), forwarded.y(), forwarded.z());

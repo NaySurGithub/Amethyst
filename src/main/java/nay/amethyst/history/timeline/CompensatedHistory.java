@@ -17,7 +17,6 @@ import org.powernukkitx.entity.Attribute;
 import org.powernukkitx.entity.effect.Effect;
 import org.powernukkitx.entity.effect.EffectType;
 import org.powernukkitx.item.Item;
-import org.powernukkitx.item.ItemID;
 import org.powernukkitx.math.AxisAlignedBB;
 import org.powernukkitx.math.Vector3;
 
@@ -119,15 +118,14 @@ public final class CompensatedHistory {
                                       int centerX, int centerY, int centerZ, long worldRevision) {
         Aabb area = new Aabb(centerX - BLOCK_RADIUS, centerY - 2, centerZ - BLOCK_RADIUS,
                 centerX + BLOCK_RADIUS + 1, centerY + 4, centerZ + BLOCK_RADIUS + 1);
-        boolean walksOnPowderSnow = walksOnPowderSnow(player);
         Map<BlockPos, BlockFrame> blocks = new HashMap<>();
         for (int x = centerX - BLOCK_RADIUS; x <= centerX + BLOCK_RADIUS; x++) {
             for (int z = centerZ - BLOCK_RADIUS; z <= centerZ + BLOCK_RADIUS; z++) {
                 for (int y = centerY - 2; y <= centerY + 3; y++) {
                     Block primary = player.getLevel().getBlock(x, y, z, 0);
                     Block extra = player.getLevel().getBlock(x, y, z, 1);
-                    BlockFrame primaryFrame = clientWorld.resolve(x, y, z, 0, captureBlock(primary, walksOnPowderSnow));
-                    BlockFrame extraFrame = clientWorld.resolve(x, y, z, 1, captureBlock(extra, walksOnPowderSnow));
+                    BlockFrame primaryFrame = clientWorld.resolve(x, y, z, 0, BlockFrame.capture(primary));
+                    BlockFrame extraFrame = clientWorld.resolve(x, y, z, 1, BlockFrame.capture(extra));
                     BlockFrame combined = BlockFrame.combine(primaryFrame, extraFrame);
                     if (combined == null || !combined.relevant()) continue;
                     blocks.put(new BlockPos(x, y, z), combined);
@@ -165,7 +163,6 @@ public final class CompensatedHistory {
             cachedWorldRevision = worldRevision;
             return;
         }
-        boolean walksOnPowderSnow = walksOnPowderSnow(player);
         Map<BlockPos, BlockFrame> updated = null;
         for (ClientWorldTracker.Key key : changes.keySet()) {
             if (key.x() < cachedArea.minX() || key.x() >= cachedArea.maxX()
@@ -174,8 +171,8 @@ public final class CompensatedHistory {
             if (updated == null) updated = new HashMap<>(cachedBlocks);
             Block primary = player.getLevel().getBlock(key.x(), key.y(), key.z(), 0);
             Block extra = player.getLevel().getBlock(key.x(), key.y(), key.z(), 1);
-            BlockFrame primaryFrame = clientWorld.resolve(key.x(), key.y(), key.z(), 0, captureBlock(primary, walksOnPowderSnow));
-            BlockFrame extraFrame = clientWorld.resolve(key.x(), key.y(), key.z(), 1, captureBlock(extra, walksOnPowderSnow));
+            BlockFrame primaryFrame = clientWorld.resolve(key.x(), key.y(), key.z(), 0, BlockFrame.capture(primary));
+            BlockFrame extraFrame = clientWorld.resolve(key.x(), key.y(), key.z(), 1, BlockFrame.capture(extra));
             BlockFrame combined = BlockFrame.combine(primaryFrame, extraFrame);
             BlockPos position = new BlockPos(key.x(), key.y(), key.z());
             if (combined == null || !combined.relevant()) updated.remove(position);
@@ -190,13 +187,6 @@ public final class CompensatedHistory {
         cachedWorldRevision = worldRevision;
     }
 
-    private static BlockFrame captureBlock(Block block, boolean walksOnPowderSnow) {
-        return BlockFrame.capture(block, walksOnPowderSnow);
-    }
-
-    private static boolean walksOnPowderSnow(Player player) {
-        return ItemID.LEATHER_BOOTS.equals(player.getInventory().getBoots().getId());
-    }
 
     private static List<Aabb> orderedCollisions(Map<BlockPos, BlockFrame> blocks) {
         List<Map.Entry<BlockPos, BlockFrame>> entries = new ArrayList<>(blocks.entrySet());

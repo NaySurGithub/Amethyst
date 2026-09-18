@@ -33,21 +33,15 @@ public record BlockFrame(
             0, Vec3.ZERO, 0, List.of(), null);
 
     public static BlockFrame capture(Block block) {
-        return capture(block, false);
-    }
-
-    public static BlockFrame capture(Block block, boolean walksOnPowderSnow) {
         if (block.isAir()) {
             return AIR;
         }
 
         String blockId = block.getId();
-        boolean powderSnow = blockId.contains("powder_snow");
         float topInset = blockId.equals("minecraft:mud") ? MUD_SINK : 0.0f;
 
         List<Aabb> collisions = new ArrayList<>();
-        AxisAlignedBB[] boxes = block.isAir() || powderSnow && !walksOnPowderSnow
-                ? null : block.getCollisionBoxes();
+        AxisAlignedBB[] boxes = block.getCollisionBoxes();
         if (!(block instanceof BlockFenceGate gate && gate.isOpen()) && boxes != null) {
             for (AxisAlignedBB box : boxes) {
                 if (box == null) continue;

@@ -24,7 +24,8 @@ public final class MovementCheckSupport {
     private static final double MOVING_BLOCK_RANGE = 1.0;
     private static final Set<String> SHAPE_EXEMPT_BLOCKS = Set.of(BlockID.MOVING_BLOCK,
             BlockID.PISTON, BlockID.STICKY_PISTON, BlockID.PISTON_ARM_COLLISION,
-            BlockID.STICKY_PISTON_ARM_COLLISION, BlockID.BAMBOO, BlockID.SCAFFOLDING);
+            BlockID.STICKY_PISTON_ARM_COLLISION, BlockID.BAMBOO, BlockID.SCAFFOLDING,
+            BlockID.POWDER_SNOW);
 
     private MovementCheckSupport() {
     }

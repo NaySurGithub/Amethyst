@@ -16,14 +16,31 @@ public final class FrameWorldView implements MovementWorldView {
     private static final float HORIZONTAL_INSET = 0.001f;
     private static final float VERTICAL_INSET = 0.40099999f;
 
+    private static final String POWDER_SNOW = "minecraft:powder_snow";
+    private static final float POWDER_SNOW_ABOVE_EPSILON = 1.0E-5f;
+
     private final WorldFrame frame;
+    private final AuthoritativeMotionState state;
     private final Map<BlockFrame, MovementBlockView> views = new IdentityHashMap<>();
 
     private FloatBox fluidBox;
     private FluidState fluidResult;
 
-    public FrameWorldView(WorldFrame frame) {
+    public FrameWorldView(WorldFrame frame, AuthoritativeMotionState state) {
         this.frame = frame;
+        this.state = state;
+    }
+
+    static boolean powderSnowSupports(AuthoritativeMotionState state, float top) {
+        return state.wearingLeatherBoots() && !state.pressingSneak()
+                && state.position().y() > top - POWDER_SNOW_ABOVE_EPSILON;
+    }
+
+    private boolean ignoredPowderSnow(Aabb box) {
+        BlockFrame block = frame.blockAt((int) Math.floor(box.minX()), (int) Math.floor(box.minY()),
+                (int) Math.floor(box.minZ()));
+        return block != null && POWDER_SNOW.equals(block.id())
+                && !powderSnowSupports(state, (float) box.maxY());
     }
 
     @Override
@@ -43,6 +60,9 @@ public final class FrameWorldView implements MovementWorldView {
         List<Aabb> boxes = frame.collisionBoxes(query);
         List<FloatBox> converted = new ArrayList<>(boxes.size());
         for (Aabb box : boxes) {
+            if (ignoredPowderSnow(box)) {
+                continue;
+            }
             converted.add(toFloatBox(box));
         }
 
@@ -228,6 +248,9 @@ public final class FrameWorldView implements MovementWorldView {
             }
             boolean intersects = false;
             for (Aabb collision : block.collisions()) {
+                if (ignoredPowderSnow(collision)) {
+                    continue;
+                }
                 if (area.intersects(toFloatBox(collision))) {
                     intersects = true;
                     break;
