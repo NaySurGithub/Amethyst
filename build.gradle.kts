@@ -19,7 +19,11 @@ repositories {
     }
 }
 
+val bundled: Configuration by configurations.creating
+
 dependencies {
+    implementation(project(":amethyst-simulation"))
+    bundled(project(":amethyst-simulation"))
     compileOnly("org.powernukkitx:server:stable-SNAPSHOT")
     testImplementation(platform("org.junit:junit-bom:5.11.3"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -42,4 +46,9 @@ tasks.test {
 
 tasks.processResources {
     filteringCharset = "UTF-8"
+}
+
+tasks.jar {
+    dependsOn(bundled)
+    from({ bundled.map { zipTree(it) } })
 }

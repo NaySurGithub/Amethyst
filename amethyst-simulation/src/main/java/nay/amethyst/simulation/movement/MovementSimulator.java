@@ -3,7 +3,7 @@ package nay.amethyst.simulation.movement;
 /** Picks the prediction engine matching the player's medium and hands it the tick. */
 public final class MovementSimulator {
 
-    static final float WATER_ACCELERATION = WaterPredictionEngine.ACCELERATION;
+    public static final float WATER_ACCELERATION = WaterPredictionEngine.ACCELERATION;
 
     private final MovementCollisionEngine collisions = new MovementCollisionEngine();
 

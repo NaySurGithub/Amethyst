@@ -1,9 +1,13 @@
-package nay.amethyst.simulation.movement;
+package nay.amethyst.history.model;
 
-import nay.amethyst.history.model.Aabb;
-import nay.amethyst.history.model.BlockFrame;
-import nay.amethyst.history.model.BlockPos;
-import nay.amethyst.history.model.WorldFrame;
+import nay.amethyst.simulation.movement.AuthoritativeMotionState;
+import nay.amethyst.simulation.movement.FloatBox;
+import nay.amethyst.simulation.movement.FloatVector;
+import nay.amethyst.simulation.movement.FluidState;
+import nay.amethyst.simulation.movement.MovementBlockPosition;
+import nay.amethyst.simulation.movement.MovementBlockView;
+import nay.amethyst.simulation.movement.MovementSimulator;
+import nay.amethyst.simulation.movement.MovementWorldView;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
