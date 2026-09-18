@@ -927,8 +927,7 @@ public final class PacketListener implements Listener {
             return;
         }
         boolean inRain = player.getLevel().isRaining() && player.getLevel().canBlockSeeSky(player);
-        if (!validItem || !charged || player.getRiding() != null
-                || !player.isTouchingWater() && !inRain) {
+        if (!validItem || !charged || player.getRiding() != null) {
             data.clearRiptideCandidates();
             return;
         }
