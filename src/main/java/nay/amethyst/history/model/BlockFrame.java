@@ -80,6 +80,7 @@ public record BlockFrame(
         if (id.contains("blue_ice")) return 0.989;
         if (id.contains("ice")) return 0.98;
         if (id.contains("slime")) return 0.8;
+        if (id.equals("minecraft:honey_block")) return 0.8;
         return 0.6;
     }
 

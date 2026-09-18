@@ -247,6 +247,17 @@ final class GroundAndAirPhysicsTest {
     }
 
     @Test
+    void honeyBlock_walkingOn_usesSlimeSlowdownAndHoneyFriction() {
+        TestBlockWorld world = new TestBlockWorld().floor(9, TestBlockWorld.HONEY);
+        AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), true);
+        state.velocity(new FloatVector(0.3f, 0.0f, 0.0f));
+
+        tick(state, world);
+
+        assertEquals(0.3f * 0.4f * MovementConstants.AIR_FRICTION * 0.8f, state.velocity().x(), DELTA);
+    }
+
+    @Test
     void bed_landingOnIt_bouncesAtThreeQuarters() {
         TestBlockWorld world = new TestBlockWorld().floor(9, TestBlockWorld.BED);
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.4f, 0.5f), false);

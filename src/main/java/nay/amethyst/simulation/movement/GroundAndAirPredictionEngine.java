@@ -205,13 +205,7 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
         if (!state.onGround() || state.sneaking()) {
             return;
         }
-        if (block.named("honey") || block.named("honey_block")) {
-            FloatVector velocity = state.velocity();
-            state.velocity(new FloatVector(velocity.x() * 0.4f, velocity.y(),
-                    velocity.z() * 0.4f));
-            return;
-        }
-        if (!block.named("slime")) {
+        if (!block.named("slime") && !block.named("honey_block")) {
             return;
         }
         FloatVector velocity = state.velocity();

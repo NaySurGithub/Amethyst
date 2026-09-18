@@ -18,7 +18,7 @@ final class TestBlockWorld implements MovementWorldView {
     static final MovementBlockView SOUL_SAND =
             new MovementBlockView("minecraft:soul_sand", 0.6f, false, false, false);
     static final MovementBlockView HONEY =
-            new MovementBlockView("minecraft:honey_block", 0.6f, false, false, false);
+            new MovementBlockView("minecraft:honey_block", 0.8f, false, false, false);
     static final MovementBlockView SLIME =
             new MovementBlockView("minecraft:slime", 0.8f, false, false, false);
     static final MovementBlockView BED =
