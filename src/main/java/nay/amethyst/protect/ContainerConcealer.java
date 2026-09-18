@@ -55,6 +55,7 @@ public final class ContainerConcealer {
 
     private final Map<UUID, PlayerView> views = new ConcurrentHashMap<>();
     private final Map<ChunkKey, long[]> chunkIndex = new ConcurrentHashMap<>();
+    private volatile AmethystSettings indexedWith;
 
     /**
      * Reconsiders every container around {@code player}. Cheap on the common case: a container
@@ -67,6 +68,10 @@ public final class ContainerConcealer {
         Level level = player.getLevel();
         if (level == null) {
             return;
+        }
+        if (settings != indexedWith) {
+            chunkIndex.clear();
+            indexedWith = settings;
         }
         PlayerView view = views.computeIfAbsent(player.getUniqueId(), uuid -> new PlayerView());
         synchronized (view) {
@@ -91,13 +96,10 @@ public final class ContainerConcealer {
         double nearSquared = near * near;
 
         LongSet seen = new LongOpenHashSet();
-        for (long key : collectContainers(level, player, settings.concealRadius())) {
+        for (long key : collectContainers(level, player, settings)) {
             int x = unpackX(key);
             int y = unpackY(key);
             int z = unpackZ(key);
-            if (settings.disabledContainers(level.getBlock(x, y, z, false).getId())) {
-                continue;
-            }
             seen.add(key);
             if (withinRange(player, x, y, z, nearSquared)) {
                 if (view.concealed.remove(key)) {
@@ -185,7 +187,8 @@ public final class ContainerConcealer {
         return dx * dx + dy * dy + dz * dz <= nearSquared;
     }
 
-    private LongSet collectContainers(Level level, Player player, int radius) {
+    private LongSet collectContainers(Level level, Player player, AmethystSettings settings) {
+        int radius = settings.concealRadius();
         LongSet containers = new LongOpenHashSet();
         double playerX = player.getX();
         double playerY = player.getY();
@@ -197,7 +200,7 @@ public final class ContainerConcealer {
         int radiusSquared = radius * radius;
         for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
             for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
-                for (long key : chunkContainers(level, chunkX, chunkZ)) {
+                for (long key : chunkContainers(level, chunkX, chunkZ, settings)) {
                     double dx = unpackX(key) + 0.5 - playerX;
                     double dy = unpackY(key) + 0.5 - playerY;
                     double dz = unpackZ(key) + 0.5 - playerZ;
@@ -214,7 +217,7 @@ public final class ContainerConcealer {
      * The containers of one chunk, remembered until something is built or broken there. Block
      * entities move rarely, and walking the whole neighborhood on every pass was most of the work.
      */
-    private long[] chunkContainers(Level level, int chunkX, int chunkZ) {
+    private long[] chunkContainers(Level level, int chunkX, int chunkZ, AmethystSettings settings) {
         ChunkKey chunkKey = new ChunkKey(level.getId(), chunkX, chunkZ);
         long[] cached = chunkIndex.get(chunkKey);
         if (cached != null) {
@@ -226,10 +229,8 @@ public final class ContainerConcealer {
         }
         LongSet found = new LongOpenHashSet();
         for (BlockEntity blockEntity : chunk.getBlockEntities().values()) {
-            if(blockEntity instanceof BlockEntityInventoryHolder && !blockEntity.closed) {
-
-
-
+            if (blockEntity instanceof BlockEntityInventoryHolder && !blockEntity.closed
+                    && !settings.disabledContainers(blockEntity.getBlock().getId())) {
                 found.add(key(blockEntity.getFloorX(), blockEntity.getFloorY(), blockEntity.getFloorZ()));
             }
         }
