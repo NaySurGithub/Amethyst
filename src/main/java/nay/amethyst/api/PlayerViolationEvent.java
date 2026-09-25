@@ -1,6 +1,6 @@
 package nay.amethyst.api;
 
-import nay.amethyst.check.type.CheckType;
+import nay.amethyst.check.CheckType;
 import org.powernukkitx.Player;
 import org.powernukkitx.event.Cancellable;
 import org.powernukkitx.event.HandlerList;

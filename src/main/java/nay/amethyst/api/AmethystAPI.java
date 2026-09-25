@@ -1,8 +1,8 @@
 package nay.amethyst.api;
 
 import nay.amethyst.AmethystPlugin;
-import nay.amethyst.check.type.CheckType;
-import nay.amethyst.data.player.PlayerData;
+import nay.amethyst.check.CheckType;
+import nay.amethyst.player.PlayerData;
 import org.powernukkitx.Player;
 
 /**

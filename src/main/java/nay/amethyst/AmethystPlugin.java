@@ -1,14 +1,10 @@
 package nay.amethyst;
 
 import nay.amethyst.api.PlayerViolationEvent;
-import nay.amethyst.data.player.PlayerData;
-import nay.amethyst.check.type.CheckType;
-import nay.amethyst.config.AmethystSettings;
-import nay.amethyst.diagnostics.AlertFormatter;
-import nay.amethyst.listener.network.PacketListener;
-import nay.amethyst.network.session.MovementSessionRegistry;
-import nay.amethyst.protect.ContainerConcealer;
-import nay.amethyst.update.VersionChecker;
+import nay.amethyst.check.CheckType;
+import nay.amethyst.network.MovementSessionRegistry;
+import nay.amethyst.network.PacketListener;
+import nay.amethyst.player.PlayerData;
 import org.powernukkitx.Player;
 import org.powernukkitx.command.Command;
 import org.powernukkitx.command.CommandSender;
