@@ -15,6 +15,7 @@ import org.powernukkitx.block.Block;
 import org.powernukkitx.entity.Attribute;
 import org.powernukkitx.entity.effect.Effect;
 import org.powernukkitx.entity.effect.EffectType;
+import org.powernukkitx.inventory.HumanInventory;
 import org.powernukkitx.item.Item;
 import org.powernukkitx.math.AxisAlignedBB;
 import org.powernukkitx.math.Vector3;
@@ -54,7 +55,12 @@ public final class CompensatedHistory {
         boolean areaChanged = !levelName.equals(cachedLevel) || centerX != cachedX || centerY != cachedY
                 || centerZ != cachedZ || cachedArea == null;
         if (areaChanged) {
-            rebuildWorldSnapshot(player, clientWorld, levelName, centerX, centerY, centerZ, worldRevision);
+            boolean reusable = levelName.equals(cachedLevel) && cachedArea != null;
+            if (reusable && worldRevision != cachedWorldRevision) {
+                applyWorldChanges(player, clientWorld, clientWorld.drainAcknowledgedChanges(), worldRevision);
+            }
+            rebuildWorldSnapshot(player, clientWorld, levelName, centerX, centerY, centerZ, worldRevision,
+                    reusable);
             clientWorld.drainAcknowledgedChanges();
         } else if (worldRevision != cachedWorldRevision) {
             applyWorldChanges(player, clientWorld, clientWorld.drainAcknowledgedChanges(), worldRevision);
@@ -114,13 +120,21 @@ public final class CompensatedHistory {
     }
 
     private void rebuildWorldSnapshot(Player player, ClientWorldTracker clientWorld, String levelName,
-                                      int centerX, int centerY, int centerZ, long worldRevision) {
+                                      int centerX, int centerY, int centerZ, long worldRevision,
+                                      boolean reusePrevious) {
         Aabb area = new Aabb(centerX - BLOCK_RADIUS, centerY - 2, centerZ - BLOCK_RADIUS,
                 centerX + BLOCK_RADIUS + 1, centerY + 4, centerZ + BLOCK_RADIUS + 1);
+        Aabb previousArea = reusePrevious ? cachedArea : null;
+        Map<BlockPos, BlockFrame> previousBlocks = cachedBlocks;
         Map<BlockPos, BlockFrame> blocks = new HashMap<>();
         for (int x = centerX - BLOCK_RADIUS; x <= centerX + BLOCK_RADIUS; x++) {
             for (int z = centerZ - BLOCK_RADIUS; z <= centerZ + BLOCK_RADIUS; z++) {
                 for (int y = centerY - 2; y <= centerY + 3; y++) {
+                    if (previousArea != null && contains(previousArea, x, y, z)) {
+                        BlockFrame previous = previousBlocks.get(new BlockPos(x, y, z));
+                        if (previous != null) blocks.put(new BlockPos(x, y, z), previous);
+                        continue;
+                    }
                     Block primary = player.getLevel().getBlock(x, y, z, 0);
                     Block extra = player.getLevel().getBlock(x, y, z, 1);
                     BlockFrame primaryFrame = clientWorld.resolve(x, y, z, 0, BlockFrame.capture(primary));
@@ -203,6 +217,12 @@ public final class CompensatedHistory {
         return List.copyOf(collisions);
     }
 
+    private static boolean contains(Aabb area, int x, int y, int z) {
+        return x >= area.minX() && x < area.maxX()
+                && y >= area.minY() && y < area.maxY()
+                && z >= area.minZ() && z < area.maxZ();
+    }
+
     private static int floor(double value) {
         return (int) Math.floor(value);
     }
@@ -219,7 +239,9 @@ public final class CompensatedHistory {
 
     private static double knockbackResistance(Player player) {
         double armor = 0;
-        for (Item item : player.getInventory().getArmorInventory().getContents().values()) {
+        HumanInventory inventory = player.getInventory();
+        for (int slot = 0; slot < 4; slot++) {
+            Item item = inventory.getUnclonedItem(HumanInventory.ARMORS_INDEX + slot);
             if (item != null && !item.isNull()) armor += item.getKnockbackResistance();
         }
         return 1 - (1 - armor) * (1 - player.getKnockbackResistance());

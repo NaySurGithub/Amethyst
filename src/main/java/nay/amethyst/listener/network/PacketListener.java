@@ -459,7 +459,7 @@ public final class PacketListener implements Listener {
     public void onSend(PacketSendEvent event) {
         if (players.isEmpty()) return;
         Player player = event.getPlayer();
-        if (player == null) return;
+        if (player == null || player.hasPermission("amethyst.bypass")) return;
         PlayerData data = players.get(player.getUniqueId());
         if (data == null) return;
         if (event.getPacket() instanceof ActorEventPacket actorEvent

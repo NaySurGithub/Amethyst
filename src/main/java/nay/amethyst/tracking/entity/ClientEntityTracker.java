@@ -152,10 +152,14 @@ public final class ClientEntityTracker {
 
     public synchronized Map<Long, EntityFrame> snapshotFrames(Vector3 center, double radius) {
         double radiusSquared = radius * radius;
-        Map<Long, EntityFrame> snapshot = new HashMap<>();
+        Map<Long, EntityFrame> snapshot = null;
         for (TrackedEntity entity : entities.values()) {
-            if (entity.position == null || entity.position.add(-center.x, -center.y, -center.z).lengthSquared()
-                    > radiusSquared) continue;
+            if (entity.position == null) continue;
+            double dx = entity.position.x - center.x;
+            double dy = entity.position.y - center.y;
+            double dz = entity.position.z - center.z;
+            if (dx * dx + dy * dy + dz * dz > radiusSquared) continue;
+            if (snapshot == null) snapshot = new HashMap<>();
             double halfWidth = entity.width * entity.scale / 2.0;
             double height = entity.height * entity.scale;
             snapshot.put(entity.runtimeId, new EntityFrame(entity.runtimeId,
@@ -164,7 +168,7 @@ public final class ClientEntityTracker {
                             entity.position.y + height, entity.position.z + halfWidth),
                     entity.solid));
         }
-        return snapshot;
+        return snapshot == null ? Map.of() : snapshot;
     }
 
     public synchronized int retainedEntityCount() {
