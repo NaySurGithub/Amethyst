@@ -27,7 +27,7 @@ public final class ClientEntityTracker {
     private static final Set<String> SOLID_TYPES = Set.of(
             "minecraft:boat", "minecraft:chest_boat", "minecraft:minecart",
             "minecraft:chest_minecart", "minecraft:hopper_minecart", "minecraft:tnt_minecart",
-            "minecraft:command_block_minecart", "minecraft:shulker");
+            "minecraft:command_block_minecart", "minecraft:shulker", "minecraft:cushion");
 
     public synchronized void add(long runtimeId, Vector3f position, boolean player,
                                  ActorDataMap actorData, String identifier, boolean projectile) {
