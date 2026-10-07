@@ -120,7 +120,8 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
             y += (levitationSpeed - y) * 0.2f;
         } else if (state.affectedByGravity()) {
             if (!scaffoldDescent) {
-                y -= state.gravity();
+                y -= state.slowFalling() && y < 0.0f ? MovementConstants.SLOW_FALLING_GRAVITY
+                        : MovementConstants.NORMAL_GRAVITY;
             }
             y *= MovementConstants.GRAVITY_MULTIPLIER;
         }

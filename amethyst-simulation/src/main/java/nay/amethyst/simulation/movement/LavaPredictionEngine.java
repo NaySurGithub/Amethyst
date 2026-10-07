@@ -34,7 +34,7 @@ public final class LavaPredictionEngine extends PredictionEngine {
         if (state.gravity() != 0.0f) {
             FloatVector velocity = state.velocity();
             state.velocity(new FloatVector(velocity.x(),
-                    velocity.y() - state.gravity() / 4.0f, velocity.z()));
+                    velocity.y() - MovementConstants.NORMAL_GRAVITY / 4.0f, velocity.z()));
         }
 
         if ((state.collideX() || state.collideZ()) && canClimbOut(boxBottom)) {
