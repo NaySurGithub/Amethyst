@@ -16,7 +16,7 @@ final class ScaffoldingTest {
         state.initialize(position, onGround);
         state.ready(true);
         MovementInputFrame.Builder input = MovementInputFrame.builder()
-                .position(position)
+                .position(position.add(0.0f, MovementConstants.PLAYER_HEIGHT_OFFSET, 0.0f))
                 .delta(FloatVector.ZERO)
                 .rotation(FloatVector.ZERO);
         for (MovementInputFlag flag : flags) {

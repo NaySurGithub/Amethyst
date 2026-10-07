@@ -148,7 +148,7 @@ public final class MovementCollisionEngineTest {
 
         @Override
         public MovementBlockView block(int x, int y, int z) {
-            return null;
+            return MovementBlockView.AIR;
         }
 
         @Override

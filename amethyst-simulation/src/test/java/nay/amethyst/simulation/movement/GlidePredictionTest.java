@@ -16,7 +16,7 @@ final class GlidePredictionTest {
         state.ready(true);
         state.slowFalling(slowFalling);
         state.updateInput(MovementInputFrame.builder()
-                .position(START)
+                .position(START.add(0.0f, MovementConstants.PLAYER_HEIGHT_OFFSET, 0.0f))
                 .delta(FloatVector.ZERO)
                 .rotation(new FloatVector(pitch, 0.0f, 0.0f))
                 .build());
