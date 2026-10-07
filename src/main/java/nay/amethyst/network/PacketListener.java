@@ -213,7 +213,6 @@ public final class PacketListener implements Listener {
         data.timerBuffer = 0.0;
         int excess = (int) Math.round((ratio - 1.0) * 100);
         double vl = data.violations.merge(CheckType.TIMER.id(), 1.0, Double::sum);
-        long now = System.nanoTime();
         if (now - data.lastAlertNanos > 300_000_000L) {
             plugin.alert(player, CheckType.TIMER, vl,
                     "ratio=" + NetworkCheckSupport.format(ratio) + " excess=" + excess + "%");
@@ -491,7 +490,7 @@ public final class PacketListener implements Listener {
             return;
         }
         if (event.getPacket() instanceof ContainerOpenPacket open) {
-            data.storageContainerOpen = STORAGE_CONTAINERS.contains(open.getType());
+            data.storageContainerOpen = STORAGE_CONTAINERS.contains(open.getContainerType());
             data.containerOpenedNanos = data.storageContainerOpen ? System.nanoTime() : 0;
             data.chestFastStreak = 0;
             data.lastChestTakeNanos = 0;

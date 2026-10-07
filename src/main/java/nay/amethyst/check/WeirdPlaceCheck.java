@@ -26,7 +26,7 @@ public final class WeirdPlaceCheck {
             return null;
         }
         if (BlockID.SCAFFOLDING.equals(player.getLevel().getBlock(block.getX(), block.getY(), block.getZ()).getId())
-                || BlockID.SCAFFOLDING.equals(player.getInventory().getItemInHand().getBlockId())) {
+                || BlockID.SCAFFOLDING.equals(player.getInventory().getItemInMainHand().getBlockId())) {
             return null;
         }
 
