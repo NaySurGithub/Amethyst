@@ -95,6 +95,7 @@ public final class AuthoritativeMotionState {
     private boolean legacySlideOffset;
     private boolean modernSprintTiming = true;
     private boolean hasSupportingBlock;
+    private boolean descendingScaffold;
 
     public void updateInput(MovementInputFrame input) {
         client.update(input);
@@ -857,6 +858,15 @@ public final class AuthoritativeMotionState {
 
     public boolean hasSupportingBlock() {
         return hasSupportingBlock;
+    }
+
+    /** Whether this tick sneaks down through scaffolding, which removes its top surface. */
+    public boolean descendingScaffold() {
+        return descendingScaffold;
+    }
+
+    public void descendingScaffold(boolean value) {
+        descendingScaffold = value;
     }
 
     public void supportingBlock(int x, int y, int z) {

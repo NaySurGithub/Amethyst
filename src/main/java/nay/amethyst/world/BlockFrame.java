@@ -2,6 +2,7 @@ package nay.amethyst.world;
 
 import org.powernukkitx.math.Vector3;
 import org.powernukkitx.block.Block;
+import org.powernukkitx.block.BlockBamboo;
 import org.powernukkitx.block.BlockBubbleColumn;
 import org.powernukkitx.block.BlockFenceGate;
 import org.powernukkitx.block.BlockLiquid;
@@ -42,7 +43,10 @@ public record BlockFrame(
 
         List<Aabb> collisions = new ArrayList<>();
         AxisAlignedBB[] boxes = block.getCollisionBoxes();
-        if (!(block instanceof BlockFenceGate gate && gate.isOpen()) && boxes != null) {
+        if (block instanceof BlockBamboo bamboo) {
+            collisions.add(BambooCollision.box(block.getFloorX(), block.getFloorY(), block.getFloorZ(),
+                    bamboo.isThick()));
+        } else if (!(block instanceof BlockFenceGate gate && gate.isOpen()) && boxes != null) {
             for (AxisAlignedBB box : boxes) {
                 if (box == null) continue;
                 Aabb collision = Aabb.from(box);

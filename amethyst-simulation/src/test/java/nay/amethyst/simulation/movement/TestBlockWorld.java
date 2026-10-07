@@ -25,6 +25,8 @@ final class TestBlockWorld implements MovementWorldView {
             new MovementBlockView("minecraft:bed", 0.6f, false, false, false);
     static final MovementBlockView ICE =
             new MovementBlockView("minecraft:ice", 0.98f, false, false, false);
+    static final MovementBlockView SCAFFOLDING =
+            new MovementBlockView("minecraft:scaffolding", 0.6f, false, false, true);
     static final MovementBlockView LADDER =
             new MovementBlockView("minecraft:ladder", 0.6f, false, false, true);
 
@@ -39,6 +41,13 @@ final class TestBlockWorld implements MovementWorldView {
     TestBlockWorld solid(int x, int y, int z, MovementBlockView view) {
         put(x, y, z, view);
         collisions.add(new FloatBox(x, y, z, x + 1.0f, y + 1.0f, z + 1.0f));
+        return this;
+    }
+
+    /** Scaffolding as the server describes it: a two-pixel slab at the top of its cell. */
+    TestBlockWorld scaffolding(int x, int y, int z) {
+        put(x, y, z, SCAFFOLDING);
+        collisions.add(new FloatBox(x, y + 14.0f / 16.0f, z, x + 1.0f, y + 1.0f, z + 1.0f));
         return this;
     }
 
@@ -97,16 +106,6 @@ final class TestBlockWorld implements MovementWorldView {
     @Override
     public float underwaterSpeed() {
         return 0.0f;
-    }
-
-    @Override
-    public boolean hasBambooNearby(FloatBox area) {
-        return false;
-    }
-
-    @Override
-    public boolean hasScaffoldingIntersection(FloatBox area) {
-        return false;
     }
 
     @Override

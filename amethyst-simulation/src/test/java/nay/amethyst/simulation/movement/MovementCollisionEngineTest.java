@@ -177,16 +177,6 @@ public final class MovementCollisionEngineTest {
         }
 
         @Override
-        public boolean hasBambooNearby(FloatBox area) {
-            return false;
-        }
-
-        @Override
-        public boolean hasScaffoldingIntersection(FloatBox area) {
-            return false;
-        }
-
-        @Override
         public boolean hasMovingBlock(FloatBox area) {
             return false;
         }

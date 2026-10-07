@@ -2,6 +2,7 @@ package nay.amethyst.simulation.movement;
 
 /** Walking, falling and jumping, driven by block friction. */
 public final class GroundAndAirPredictionEngine extends PredictionEngine {
+    private static final float SCAFFOLDING_SPEED = 0.15f;
 
     public GroundAndAirPredictionEngine(AuthoritativeMotionState state, MovementWorldView world,
                                         MovementCollisionEngine collisions,
@@ -25,9 +26,24 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
 
         applyKnockback();
         moveRelative(acceleration);
-        applyJump();
+        ScaffoldContact scaffold = scaffoldContact();
+        boolean descending = state.sneaking() && scaffold.overSupported();
+        state.descendingScaffold(descending);
+        if (descending) {
+            FloatVector velocity = state.velocity();
+            state.velocity(new FloatVector(velocity.x(), -SCAFFOLDING_SPEED, velocity.z()));
+        }
+        boolean scaffoldJump = state.pressingJump() && !descending && scaffold.inside();
+        if (scaffoldJump) {
+            FloatVector velocity = state.velocity();
+            state.velocity(new FloatVector(velocity.x(), SCAFFOLDING_SPEED, velocity.z()));
+            state.jumpDelay(MovementConstants.JUMP_DELAY_TICKS);
+        } else {
+            applyJump();
+        }
+        boolean scaffoldDescent = descending && (scaffold.inside() || scaffold.over());
         applyPowderSnowTraversal();
-        applyClimbable();
+        applyClimbable(scaffoldJump);
 
         boolean cobweb = insideBlockNamed("web");
         boolean powderSnow = !cobweb && insideBlockNamed("powder_snow");
@@ -98,12 +114,14 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
         float x = velocity.x();
         float y = velocity.y();
         float z = velocity.z();
-        if (state.levitationLevel() > 0) {
+        if (!scaffoldDescent && state.levitationLevel() > 0) {
             float levitationSpeed = MovementConstants.LEVITATION_MULTIPLIER
                     * state.levitationLevel();
             y += (levitationSpeed - y) * 0.2f;
         } else if (state.affectedByGravity()) {
-            y -= state.gravity();
+            if (!scaffoldDescent) {
+                y -= state.gravity();
+            }
             y *= MovementConstants.GRAVITY_MULTIPLIER;
         }
         x *= friction;
@@ -111,6 +129,35 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
         state.velocity(new FloatVector(x, y, z));
         applyHoneyWallSlide();
         return result(true);
+    }
+
+    /**
+     * Scaffolding in every column under the body: at the feet layer, at the
+     * layer below while sneaking, and whether that lower scaffolding rests on
+     * something other than air or water.
+     */
+    private ScaffoldContact scaffoldContact() {
+        FloatBox box = state.boundingBox();
+        int feetY = floor(box.minY());
+        int belowY = floor(box.minY() - 1.0f);
+        boolean inside = false;
+        boolean over = false;
+        boolean overSupported = false;
+        for (int x = floor(box.minX()); x <= floor(box.maxX()); x++) {
+            for (int z = floor(box.minZ()); z <= floor(box.maxZ()); z++) {
+                inside |= world.block(x, feetY, z).named("scaffolding");
+                if (!state.sneaking() || !world.block(x, belowY, z).named("scaffolding")) {
+                    continue;
+                }
+                over = true;
+                MovementBlockView support = world.block(x, belowY - 1, z);
+                overSupported |= !support.air() && !support.id().contains("water");
+            }
+        }
+        return new ScaffoldContact(inside, over, overSupported);
+    }
+
+    private record ScaffoldContact(boolean inside, boolean over, boolean overSupported) {
     }
 
     private void applyPowderSnowTraversal() {
@@ -182,15 +229,15 @@ public final class GroundAndAirPredictionEngine extends PredictionEngine {
         state.velocity(new FloatVector(x, y, z));
     }
 
-    private void applyClimbable() {
+    private void applyClimbable(boolean scaffoldJump) {
         MovementBlockView block = world.block(floor(state.position().x()),
                 floor(state.position().y()), floor(state.position().z()));
-        if (!block.climbable()) {
+        if (!block.climbable() || block.named("scaffolding")) {
             return;
         }
         FloatVector velocity = state.velocity();
         float y = Math.max(velocity.y(), -MovementConstants.CLIMB_SPEED);
-        if (state.pressingJump() || state.collideX() || state.collideZ()) {
+        if (state.pressingJump() && !scaffoldJump || state.collideX() || state.collideZ()) {
             y = MovementConstants.CLIMB_SPEED;
         }
         if (state.sneaking() && y < 0.0f) {

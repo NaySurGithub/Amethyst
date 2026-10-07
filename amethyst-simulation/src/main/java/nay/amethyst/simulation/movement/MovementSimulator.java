@@ -27,6 +27,7 @@ public final class MovementSimulator {
             state.velocity(FloatVector.ZERO);
             return finishRiptideTick(state, result(state, false));
         }
+        state.descendingScaffold(false);
         if (state.velocity().lengthSquared() < 1.0E-12f) {
             state.velocity(FloatVector.ZERO);
         }
@@ -61,10 +62,8 @@ public final class MovementSimulator {
         }
         if (world.hasMovingBlock(state.boundingBox())
                 || !state.riptideActive() && world.hasSolidEntityNearby(state.boundingBox())
-                || world.hasBambooNearby(state.boundingBox())
-                || world.hasScaffoldingIntersection(state.boundingBox())
-                || world.hasScaffoldingIntersection(state.clientBoundingBox())
-                || !world.collisionBoxes(state.clientBoundingBox()).isEmpty()) {
+                || !MovementCollisionEngine.solid(world.collisionBoxes(state.clientBoundingBox()), world,
+                        state.clientBoundingBox().minY(), false).isEmpty()) {
             return false;
         }
         return !state.flying() && !state.justDisabledFlight() && !state.noClip()

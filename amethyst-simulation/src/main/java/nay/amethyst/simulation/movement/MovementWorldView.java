@@ -16,10 +16,6 @@ public interface MovementWorldView {
     /** Swim acceleration for this frame. */
     float underwaterSpeed();
 
-    boolean hasBambooNearby(FloatBox area);
-
-    boolean hasScaffoldingIntersection(FloatBox area);
-
     /** Whether a piston is mid-stroke in the area. */
     boolean hasMovingBlock(FloatBox area);
 

@@ -171,27 +171,6 @@ public final class FrameWorldView implements MovementWorldView {
     }
 
     @Override
-    public boolean hasBambooNearby(FloatBox area) {
-        FloatBox grown = area.grow(1.0f, 1.0f, 1.0f);
-        for (BlockPos position : frame.index().bamboo()) {
-            if (intersectsCell(grown, position)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @Override
-    public boolean hasScaffoldingIntersection(FloatBox area) {
-        for (BlockPos position : frame.index().scaffolding()) {
-            if (intersectsCell(area, position)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    @Override
     public boolean hasMovingBlock(FloatBox area) {
         FloatBox grown = area.grow(1.0f, 1.0f, 1.0f);
         for (BlockPos position : frame.index().moving()) {

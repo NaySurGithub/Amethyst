@@ -8,17 +8,21 @@ public final class MovementCollisionEngine {
     private static final float PENETRATION_EPSILON_SQUARED = 1.0E-11f;
     private static final float EDGE_INSET = 0.025f;
     private static final float EDGE_STEP = 0.05f;
+    private static final float SCAFFOLDING_TOP_TOLERANCE = 1.0E-6f;
 
     public void move(AuthoritativeMotionState state, MovementWorldView world,
                      float correctionThreshold) {
         FloatVector requested = state.velocity();
+        float feetY = state.position().y();
+        boolean descending = state.descendingScaffold();
         if (state.sneaking() && state.onGround() && requested.y() <= 0.0f) {
-            requested = avoidEdge(state.boundingBox(), requested, world);
+            requested = avoidEdge(state.boundingBox(), requested, world, feetY, descending);
             state.velocity(requested);
         }
 
         FloatBox original = state.boundingBox();
-        List<FloatBox> collisions = world.collisionBoxes(original.extend(requested));
+        List<FloatBox> collisions = solid(world.collisionBoxes(original.extend(requested)), world,
+                feetY, descending);
         Resolution collision = resolve(original, requested, collisions, state.stuckInCollider());
         FloatVector resolved = collision.movement();
         boolean penetrated = collision.penetrated();
@@ -34,7 +38,8 @@ public final class MovementCollisionEngine {
 
         if (mayStep && (xCollision || zCollision)) {
             Resolution step = autoStep(original, requested, collisions, state.stuckInCollider());
-            boolean stepBlocked = !world.collisionBoxes(step.box()).isEmpty();
+            boolean stepBlocked = !solid(world.collisionBoxes(step.box()), world, feetY, descending)
+                    .isEmpty();
             if (!stepBlocked && resolved.horizontalLengthSquared() < step.movement().horizontalLengthSquared()) {
                 float normalDistance = collision.box().feetPosition().subtract(state.client().position()).length();
                 float stepDistance = step.box().feetPosition().subtract(state.client().position()).length();
@@ -245,25 +250,48 @@ public final class MovementCollisionEngine {
     }
 
     private static FloatVector avoidEdge(FloatBox box, FloatVector movement,
-                                         MovementWorldView world) {
+                                         MovementWorldView world, float feetY, boolean descending) {
         FloatBox support = new FloatBox(box.minX() + EDGE_INSET, box.minY(), box.minZ() + EDGE_INSET,
                 box.maxX() - EDGE_INSET, box.maxY(), box.maxZ() - EDGE_INSET);
         float x = movement.x();
         float z = movement.z();
-        while (x != 0.0f && !supported(support, x, 0.0f, world)) x = reduce(x);
-        while (z != 0.0f && !supported(support, 0.0f, z, world)) z = reduce(z);
-        while (x != 0.0f && z != 0.0f && !supported(support, x, z, world)) {
+        while (x != 0.0f && !supported(support, x, 0.0f, world, feetY, descending)) x = reduce(x);
+        while (z != 0.0f && !supported(support, 0.0f, z, world, feetY, descending)) z = reduce(z);
+        while (x != 0.0f && z != 0.0f && !supported(support, x, z, world, feetY, descending)) {
             x = reduce(x);
             z = reduce(z);
         }
         return new FloatVector(x, movement.y(), z);
     }
 
-    private static boolean supported(FloatBox box, float x, float z,
-                                     MovementWorldView world) {
+    private static boolean supported(FloatBox box, float x, float z, MovementWorldView world,
+                                     float feetY, boolean descending) {
         FloatBox moved = box.offset(new FloatVector(x,
                 -MovementConstants.STEP_HEIGHT * 1.01f, z));
-        return !world.collisionBoxes(moved).isEmpty();
+        return !solid(world.collisionBoxes(moved), world, feetY, descending).isEmpty();
+    }
+
+    /**
+     * Drops the scaffolding surfaces that are not solid for these feet:
+     * scaffolding only holds a player standing on its top who is not
+     * descending through it, and lets them through from the sides and below.
+     */
+    public static List<FloatBox> solid(List<FloatBox> boxes, MovementWorldView world, float feetY,
+                                       boolean descending) {
+        List<FloatBox> kept = null;
+        for (int index = 0; index < boxes.size(); index++) {
+            FloatBox box = boxes.get(index);
+            boolean scaffolding = world.block(floor(box.minX()), floor(box.minY()), floor(box.minZ()))
+                    .named("scaffolding");
+            boolean passable = scaffolding
+                    && (descending || feetY < box.maxY() - SCAFFOLDING_TOP_TOLERANCE);
+            if (passable && kept == null) {
+                kept = new ArrayList<>(boxes.subList(0, index));
+            } else if (!passable && kept != null) {
+                kept.add(box);
+            }
+        }
+        return kept == null ? boxes : kept;
     }
 
     private static float reduce(float value) {
