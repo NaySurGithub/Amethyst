@@ -26,7 +26,9 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-          cache: gradle
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Download PowerNukkitX
         run: curl --fail --location --retry 3 --output ../powernukkitx.jar https://github.com/PowerNukkitX/PowerNukkitX/releases/download/3.0.2/powernukkitx.jar
