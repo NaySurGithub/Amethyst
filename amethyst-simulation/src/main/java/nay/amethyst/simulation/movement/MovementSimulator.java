@@ -62,6 +62,8 @@ public final class MovementSimulator {
         }
         if (world.hasMovingBlock(state.boundingBox())
                 || !state.riptideActive() && world.hasSolidEntityNearby(state.boundingBox())
+                // temp until i fix that shi
+                || world.hasBambooNearby(state.boundingBox())
                 || !MovementCollisionEngine.solid(world.collisionBoxes(state.clientBoundingBox()), world,
                         state.clientBoundingBox().minY(), false).isEmpty()) {
             return false;

@@ -109,6 +109,11 @@ final class TestBlockWorld implements MovementWorldView {
     }
 
     @Override
+    public boolean hasBambooNearby(FloatBox area) {
+        return false;
+    }
+
+    @Override
     public boolean hasMovingBlock(FloatBox area) {
         return false;
     }
