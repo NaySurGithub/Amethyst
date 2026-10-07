@@ -6,6 +6,7 @@ import org.cloudburstmc.math.vector.Vector3i;
 import org.cloudburstmc.protocol.bedrock.data.inventory.ItemData;
 import org.cloudburstmc.protocol.bedrock.data.payload.inventory.transaction.data.ItemUseInventoryTransaction;
 import org.powernukkitx.Player;
+import org.powernukkitx.block.BlockID;
 import org.powernukkitx.item.Item;
 
 /** Refuses a placement made against a block the player is not looking at. */
@@ -22,6 +23,10 @@ public final class WeirdPlaceCheck {
         Vector3f click = transaction.getClickPosition();
         if (block == null || click == null || data.inGrace()
                 || data.badPacketMExempt(System.nanoTime())) {
+            return null;
+        }
+        if (BlockID.SCAFFOLDING.equals(player.getLevel().getBlock(block.getX(), block.getY(), block.getZ()).getId())
+                || BlockID.SCAFFOLDING.equals(player.getInventory().getItemInHand().getBlockId())) {
             return null;
         }
 

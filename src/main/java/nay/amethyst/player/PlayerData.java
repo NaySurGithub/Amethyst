@@ -54,7 +54,8 @@ public final class PlayerData {
     public double timerBuffer;
     public int timerWarmup;
     public int timerInputs;
-    public int timerTicks;
+    public double timerTicks;
+    public long timerClockNanos;
     public int airStallBuffer;
     public int sprintFoodBuffer;
     public int sprintUseBuffer;
@@ -87,6 +88,8 @@ public final class PlayerData {
     public int chestStealerBuffer;
     public long lastChestTakeNanos;
     public int chestFastStreak;
+    public boolean storageContainerOpen;
+    public int chestOpenReactionBuffer;
     public long containerOpenedNanos;
     public long lastRidingNanos;
     public long lastTotemPopNanos;
@@ -186,7 +189,6 @@ public final class PlayerData {
     public synchronized void addPendingTeleport() {
         pendingTeleportAcks++;
         pendingTeleportDeadline = inputSequence + 60;
-        gracePeriods.grant(GraceReason.TELEPORT, PROTOCOL_GRACE_MILLIS);
     }
 
     public synchronized void acknowledgePendingTeleport() {
@@ -499,6 +501,7 @@ public final class PlayerData {
         timerWarmup = 0;
         timerInputs = 0;
         timerTicks = 0;
+        timerClockNanos = 0;
         airStallBuffer = 0;
         sprintFoodBuffer = 0;
         sprintUseBuffer = 0;
@@ -529,6 +532,8 @@ public final class PlayerData {
         chestStealerBuffer = 0;
         lastChestTakeNanos = 0;
         chestFastStreak = 0;
+        storageContainerOpen = false;
+        chestOpenReactionBuffer = 0;
         containerOpenedNanos = 0;
         lastRidingNanos = 0;
         lastTotemPopNanos = 0;
@@ -582,8 +587,14 @@ public final class PlayerData {
     }
 
     /** Returns whether a transition that globally exempts checks is still active. */
+    /**
+     * Whether movement is exempt right now. A teleport is exempt only until the client confirms it,
+     * not for a fixed time: a fixed window let a player chaining ender pearls or chorus fruit move
+     * freely for seconds after each one.
+     */
     public boolean inGrace() {
-        return gracePeriods.active(GraceReason.TELEPORT)
+        return hasPendingTeleport()
+                || gracePeriods.active(GraceReason.TELEPORT)
                 || gracePeriods.active(GraceReason.WORLD_CHANGE)
                 || gracePeriods.active(GraceReason.CHUNK_LOADING)
                 || gracePeriods.active(GraceReason.EFFECT_CHANGE);

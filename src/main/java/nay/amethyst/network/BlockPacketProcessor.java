@@ -49,6 +49,9 @@ public final class BlockPacketProcessor {
         }
 
         Block block = event.getBlock();
+        if (BlockID.SCAFFOLDING.equals(block.getId())) {
+            return;
+        }
         double eyeX = data.lastPosition != null ? data.lastPosition.getX() : player.getX();
         double eyeY = data.lastPosition != null ? data.lastPosition.getY()
                 : player.getY() + player.getEyeHeight();
@@ -108,7 +111,9 @@ public final class BlockPacketProcessor {
                     blockPosition.getZ() + 0.5));
             double maximumReach = Math.min(7.0,
                     Math.max(1.0, plugin.settings().blocksMaxReach()));
-            if (reach > maximumReach && !correcting && !data.breakReachExempt(now)) {
+            boolean scaffolding = BlockID.SCAFFOLDING.equals(player.getLevel().getBlock(
+                    blockPosition.getX(), blockPosition.getY(), blockPosition.getZ()).getId());
+            if (reach > maximumReach && !correcting && !scaffolding && !data.breakReachExempt(now)) {
                 violations.fail(event, player, data, CheckType.BREAK_REACH, 1,
                         "distance=" + NetworkCheckSupport.format(reach), true, false);
                 return;

@@ -24,7 +24,9 @@ import org.cloudburstmc.protocol.bedrock.data.PlayerActionType;
 import org.cloudburstmc.protocol.bedrock.data.PlayerAuthInputData;
 import org.cloudburstmc.protocol.bedrock.packet.PlayerActionPacket;
 import org.cloudburstmc.protocol.bedrock.packet.ActorEventPacket;
+import org.cloudburstmc.protocol.bedrock.packet.ContainerClosePacket;
 import org.cloudburstmc.protocol.bedrock.packet.ContainerOpenPacket;
+import org.cloudburstmc.protocol.bedrock.data.inventory.ContainerType;
 import org.cloudburstmc.protocol.bedrock.packet.AnimatePacket;
 import org.cloudburstmc.protocol.bedrock.data.payload.inventory.transaction.ItemUseTriggerType;
 import org.cloudburstmc.protocol.bedrock.packet.InteractPacket;
@@ -70,6 +72,8 @@ import org.powernukkitx.Player;
 import org.powernukkitx.block.Block;
 import org.powernukkitx.event.block.BlockBreakEvent;
 import org.powernukkitx.event.block.BlockPlaceEvent;
+import org.powernukkitx.event.level.ChunkUnloadEvent;
+import org.powernukkitx.event.level.LevelUnloadEvent;
 import org.powernukkitx.entity.Entity;
 import org.powernukkitx.entity.EntityLiving;
 import org.powernukkitx.entity.projectile.EntityProjectile;
@@ -111,11 +115,15 @@ public final class PacketListener implements Listener {
     private static final long GRACE_MILLIS = 2000;
     private static final double BAD_PACKET_D_KICK_VIOLATIONS = 35.0;
     private static final long TELEPORT_GRACE_MILLIS = 3000;
+    private static final Set<ContainerType> STORAGE_CONTAINERS = Set.of(ContainerType.CONTAINER,
+            ContainerType.DISPENSER, ContainerType.DROPPER, ContainerType.HOPPER,
+            ContainerType.MINECART_CHEST, ContainerType.MINECART_HOPPER, ContainerType.CHEST_BOAT);
     private static final int HOTBAR_SIZE = 9;
     private static final Set<String> THROWN_FROM_HOTBAR = Set.of(ItemID.POTION,
             ItemID.SPLASH_POTION, ItemID.LINGERING_POTION, ItemID.ENDER_PEARL);
     private static final double TIMER_KICK_VIOLATIONS = 15.0;
     private static final int TIMER_WINDOW_TICKS = 60;
+    private static final long TIMER_TICK_NANOS = 50_000_000L;
     private static final double TIMER_MAXIMUM_RATIO = 1.7;
     private static final double TIMER_PING_ALLOWANCE = 0.5;
     private static final int FAST_USE_MINIMUM_TICKS = 5;
@@ -153,15 +161,22 @@ public final class PacketListener implements Listener {
             if (player.getRiding() != null) {
                 data.lastRidingNanos = now;
             }
-            inspectTimer(player, data);
+            inspectTimer(player, data, now);
             if (data.network.shouldProbe()) sendAcknowledgment(player, data, null);
         }
     }
 
-    private void inspectTimer(Player player, PlayerData data) {
+    /**
+     * Compares the inputs a player sent with the real time that passed, in 50 ms ticks. Counting
+     * server ticks instead would make every player look fast after a stall or under low TPS, since
+     * the client keeps sending 20 inputs a second while the server falls behind.
+     */
+    private void inspectTimer(Player player, PlayerData data, long now) {
         data.network.drainOverBudgetInputs();
         data.timerInputs += data.network.drainInputCount();
-        data.timerTicks++;
+        data.timerTicks += data.timerClockNanos == 0 ? 1.0
+                : (now - data.timerClockNanos) / (double) TIMER_TICK_NANOS;
+        data.timerClockNanos = now;
         if (data.inGrace() || player.hasPermission("amethyst.bypass")) {
             data.timerInputs = 0;
             data.timerTicks = 0;
@@ -315,9 +330,21 @@ public final class PacketListener implements Listener {
         }
         data.safeLocation = event.getTo();
         data.lastPosition = null;
-        GraceReason reason = event.getFrom().getLevel() == event.getTo().getLevel()
-                ? GraceReason.TELEPORT : GraceReason.WORLD_CHANGE;
-        data.grantGrace(reason, TELEPORT_GRACE_MILLIS);
+        if (event.getFrom().getLevel() == event.getTo().getLevel()) {
+            data.grantGrace(GraceReason.TELEPORT, 0);
+        } else {
+            data.grantGrace(GraceReason.WORLD_CHANGE, TELEPORT_GRACE_MILLIS);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onChunkUnload(ChunkUnloadEvent event) {
+        plugin.concealer().unloadChunk(event.getLevel(), event.getChunk().getX(), event.getChunk().getZ());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onLevelUnload(LevelUnloadEvent event) {
+        plugin.concealer().unloadLevel(event.getLevel());
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -373,6 +400,8 @@ public final class PacketListener implements Listener {
             }
             inspectInventoryMove(event, player, playerData, packet);
             movementProcessor.inspectMovement(event, player, packet, blockProcessor);
+        } else if (event.getPacket() instanceof ContainerClosePacket) {
+            playerData.storageContainerOpen = false;
         } else if (event.getPacket() instanceof ItemStackRequestPacket packet) {
             long now = System.nanoTime();
             inventoryMoveCheck.handleRequest(playerData, packet, now);
@@ -424,7 +453,8 @@ public final class PacketListener implements Listener {
 
     private void inspectChestStealer(PacketReceiveEvent event, Player player, PlayerData data,
                                      ItemStackRequestPacket packet, long now) {
-        ChestStealerCheck.Result result = chestStealerCheck.inspect(data, packet, now, 8);
+        ChestStealerCheck.Result result = chestStealerCheck.inspect(data, packet, now, 8,
+                NetworkCheckSupport.ping(player));
         if (result.failed()) {
             fail(event, player, data, CheckType.CHEST_STEALER_A, 1, result.detail(), true);
         }
@@ -460,10 +490,15 @@ public final class PacketListener implements Listener {
             data.lastTotemPopNanos = System.nanoTime();
             return;
         }
-        if (event.getPacket() instanceof ContainerOpenPacket) {
-            data.containerOpenedNanos = System.nanoTime();
+        if (event.getPacket() instanceof ContainerOpenPacket open) {
+            data.storageContainerOpen = STORAGE_CONTAINERS.contains(open.getType());
+            data.containerOpenedNanos = data.storageContainerOpen ? System.nanoTime() : 0;
             data.chestFastStreak = 0;
             data.lastChestTakeNanos = 0;
+            return;
+        }
+        if (event.getPacket() instanceof ContainerClosePacket) {
+            data.storageContainerOpen = false;
             return;
         }
         if (event.getPacket() instanceof LevelChunkPacket chunkPacket) {

@@ -16,10 +16,12 @@ public final class ChestStealerCheck {
     private static final long SEQUENCE_RESET_NANOS = 1_500_000_000L;
     private static final int FAST_STREAK_THRESHOLD = 3;
     private static final long OPEN_REACTION_NANOS = 250_000_000L;
+    private static final int OPEN_REACTION_BUFFER = 2;
 
-    public Result inspect(PlayerData data, ItemStackRequestPacket packet, long now, int cpsLimit) {
+    public Result inspect(PlayerData data, ItemStackRequestPacket packet, long now, int cpsLimit,
+                          long pingMillis) {
         List<ItemStackRequest> requests = packet.getRequests();
-        if (requests == null || requests.isEmpty() || data.inGrace()) {
+        if (requests == null || requests.isEmpty() || data.inGrace() || !data.storageContainerOpen) {
             return Result.CLEAN;
         }
 
@@ -39,7 +41,7 @@ public final class ChestStealerCheck {
         }
         int containerActions = takeActions;
 
-        Result openResult = inspectOpenReaction(data, now, takeActions);
+        Result openResult = inspectOpenReaction(data, now, takeActions, pingMillis);
         Result intervalResult = inspectInterval(data, now, containerActions, takeActions);
         if (openResult.failed()) {
             intervalResult = openResult;
@@ -71,19 +73,26 @@ public final class ChestStealerCheck {
     }
 
     /**
-     * Flags the first take that lands before a player could realistically read the container,
-     * measured from the moment the server opened it.
+     * Flags first takes that land before a player could realistically read the container. The
+     * time is measured from the moment the server opened it, less the round trip the open and the
+     * take spent on the network, and only a repeated fast reaction counts.
      */
-    private Result inspectOpenReaction(PlayerData data, long now, int takeActions) {
+    private Result inspectOpenReaction(PlayerData data, long now, int takeActions, long pingMillis) {
         if (takeActions == 0 || data.containerOpenedNanos <= 0) {
             return Result.CLEAN;
         }
-        long elapsed = now - data.containerOpenedNanos;
+        long elapsed = now - data.containerOpenedNanos - pingMillis * 1_000_000L;
         data.containerOpenedNanos = 0;
-        if (elapsed < 0 || elapsed > OPEN_REACTION_NANOS) {
+        if (elapsed > OPEN_REACTION_NANOS) {
+            data.chestOpenReactionBuffer = Math.max(0, data.chestOpenReactionBuffer - 1);
             return Result.CLEAN;
         }
-        return new Result(true, 0, elapsed / 1_000_000L, true);
+        data.chestOpenReactionBuffer++;
+        if (data.chestOpenReactionBuffer < OPEN_REACTION_BUFFER) {
+            return Result.CLEAN;
+        }
+        data.chestOpenReactionBuffer = OPEN_REACTION_BUFFER - 1;
+        return new Result(true, 0, Math.max(0, elapsed) / 1_000_000L, true);
     }
 
     /**

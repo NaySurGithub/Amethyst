@@ -12,6 +12,7 @@ import org.powernukkitx.blockentity.BlockEntityInventoryHolder;
 import org.powernukkitx.level.Level;
 import org.powernukkitx.level.format.IChunk;
 import org.powernukkitx.math.BlockFace;
+import org.powernukkitx.math.BlockVector3;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -39,6 +40,7 @@ public final class ContainerConcealer {
     private static final int MAX_IDLE_PASSES = 5;
     private static final double STILL_EYE_SQUARED = 1.0E-4;
     private static final int MAX_TRACKED_CHANGES = 65_536;
+    private static final long INDEX_LIFETIME_NANOS = 5_000_000_000L;
 
     /**
      * The five points aimed at on each face, as offsets inside the block: its middle and its four
@@ -57,7 +59,7 @@ public final class ContainerConcealer {
     private static final Map<BlockState, Boolean> OCCLUSION = new ConcurrentHashMap<>();
 
     private final Map<UUID, PlayerView> views = new ConcurrentHashMap<>();
-    private final Map<ChunkKey, long[]> chunkIndex = new ConcurrentHashMap<>();
+    private final Map<ChunkKey, IndexedChunk> chunkIndex = new ConcurrentHashMap<>();
     private final Map<ChunkKey, Long> chunkChanges = new ConcurrentHashMap<>();
     private final AtomicLong changeCounter = new AtomicLong();
     private volatile long changesResetAt;
@@ -150,6 +152,10 @@ public final class ContainerConcealer {
             int x = unpackX(key);
             int y = unpackY(key);
             int z = unpackZ(key);
+            if (!isContainer(level, x, y, z)) {
+                invalidate(level, x, z);
+                continue;
+            }
             seen.add(key);
             if (withinRange(player, x, y, z, nearSquared)) {
                 if (view.concealed.remove(key)) {
@@ -266,14 +272,26 @@ public final class ContainerConcealer {
     }
 
     /**
-     * The containers of one chunk, remembered until something is built or broken there. Block
+     * Whether a container still stands at this position. The index can outlive one that an
+     * explosion, a piston or a plugin removed without a block event, and covering an empty cell
+     * would show a block that is not there.
+     */
+    private static boolean isContainer(Level level, int x, int y, int z) {
+        BlockEntity blockEntity = level.getBlockEntity(new BlockVector3(x, y, z));
+        return blockEntity instanceof BlockEntityInventoryHolder && !blockEntity.closed;
+    }
+
+    /**
+     * The containers of one chunk, remembered until something is built or broken there, or for a
+     * few seconds at most so that containers added without a block event are found too. Block
      * entities move rarely, and walking the whole neighborhood on every pass was most of the work.
      */
     private long[] chunkContainers(Level level, int chunkX, int chunkZ, AmethystSettings settings) {
         ChunkKey chunkKey = new ChunkKey(level.getId(), chunkX, chunkZ);
-        long[] cached = chunkIndex.get(chunkKey);
-        if (cached != null) {
-            return cached;
+        IndexedChunk cached = chunkIndex.get(chunkKey);
+        long now = System.nanoTime();
+        if (cached != null && now - cached.indexedAt() < INDEX_LIFETIME_NANOS) {
+            return cached.positions();
         }
         IChunk chunk = level.getChunkIfLoaded(chunkX, chunkZ);
         if (chunk == null) {
@@ -287,8 +305,30 @@ public final class ContainerConcealer {
             }
         }
         long[] positions = found.toLongArray();
-        chunkIndex.put(chunkKey, positions);
+        chunkIndex.put(chunkKey, new IndexedChunk(positions, now));
         return positions;
+    }
+
+    /**
+     * Forgets what is remembered about a chunk the server unloaded, so the index only ever holds
+     * the loaded part of the world.
+     */
+    public void unloadChunk(Level level, int chunkX, int chunkZ) {
+        if (level == null) {
+            return;
+        }
+        ChunkKey chunkKey = new ChunkKey(level.getId(), chunkX, chunkZ);
+        chunkIndex.remove(chunkKey);
+        chunkChanges.remove(chunkKey);
+    }
+
+    public void unloadLevel(Level level) {
+        if (level == null) {
+            return;
+        }
+        int levelId = level.getId();
+        chunkIndex.keySet().removeIf(key -> key.levelId() == levelId);
+        chunkChanges.keySet().removeIf(key -> key.levelId() == levelId);
     }
 
     /**
@@ -558,6 +598,9 @@ public final class ContainerConcealer {
     }
 
     private record ChunkKey(int levelId, int x, int z) {
+    }
+
+    private record IndexedChunk(long[] positions, long indexedAt) {
     }
 
     private static final class PlayerView {
