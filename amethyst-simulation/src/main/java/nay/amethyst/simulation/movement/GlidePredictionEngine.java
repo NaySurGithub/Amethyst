@@ -31,14 +31,17 @@ public final class GlidePredictionEngine extends PredictionEngine {
         float horizontalLook = pitchCosine;
         float squaredPitchCosine = pitchCosine * pitchCosine;
 
-        y += -0.08f + squaredPitchCosine * 0.06f;
+        if (state.affectedByGravity()) {
+            float gravity = state.gravity();
+            y += -gravity + squaredPitchCosine * (gravity * 0.75f);
+        }
         if (y < 0.0f && horizontalLook > 0.0f) {
             float acceleration = y * -0.1f * squaredPitchCosine;
             y += acceleration;
             x += lookX * acceleration / horizontalLook;
             z += lookZ * acceleration / horizontalLook;
         }
-        if (pitch < 0.0f) {
+        if (pitch < 0.0f && horizontalLook > 0.0f) {
             float acceleration = horizontalVelocity * -pitchSine * 0.04f;
             y += acceleration * 3.2f;
             x -= lookX * acceleration / horizontalLook;
