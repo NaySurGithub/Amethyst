@@ -202,7 +202,7 @@ public final class VehiclePredictor {
         if (!(block instanceof org.powernukkitx.block.BlockBubbleColumn column)) return velocity;
         return column.isDragDown()
                 ? new Vector3(velocity.x, Math.max(-0.3, velocity.y - 0.03), velocity.z)
-                : new Vector3(velocity.x, Math.min(0.7, velocity.y + 0.08), velocity.z);
+                : new Vector3(velocity.x, Math.min(0.7, velocity.y + 0.06), velocity.z);
     }
 
     private static double nearbyEntityAllowance(Entity vehicle, Vector3 movement) {

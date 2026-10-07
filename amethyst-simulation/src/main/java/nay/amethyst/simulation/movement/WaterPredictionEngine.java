@@ -17,7 +17,7 @@ public final class WaterPredictionEngine extends PredictionEngine {
     private static final float BUBBLE_DOWNWARD_ACCELERATION = 0.03f;
     private static final float BUBBLE_UPWARD_MAX = 0.7f;
     private static final float BUBBLE_UPWARD_EXIT_MAX = 1.8f;
-    private static final float BUBBLE_UPWARD_ACCELERATION = 0.08f;
+    private static final float BUBBLE_UPWARD_ACCELERATION = 0.06f;
     private static final float BUBBLE_UPWARD_EXIT_ACCELERATION = 0.1f;
 
     private final FluidState fluid;
