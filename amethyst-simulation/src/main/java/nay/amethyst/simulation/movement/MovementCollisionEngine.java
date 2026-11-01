@@ -4,54 +4,68 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class MovementCollisionEngine {
-    private static final float COLLISION_EPSILON = 1.0E-5f;
-    private static final float PENETRATION_EPSILON_SQUARED = 1.0E-11f;
+    private static final float COLLISION_EPSILON = MovementConstants.FLT_EPSILON;
+    private static final float PENETRATION_EPSILON = 1.0E-6f;
     private static final float EDGE_INSET = 0.025f;
     private static final float EDGE_STEP = 0.05f;
     private static final float SCAFFOLDING_TOP_TOLERANCE = 1.0E-6f;
 
-    public void move(AuthoritativeMotionState state, MovementWorldView world,
-                     float correctionThreshold) {
-        FloatVector requested = state.velocity();
+    public MoveOutcome move(AuthoritativeMotionState state, MovementWorldView world,
+                            float correctionThreshold) {
+        FloatVector stored = state.velocity();
+        FloatVector requested = stored;
+        // BDS move search: requests longer than 16 blocks are scaled to 16 (divided by the length)
+        float lengthSquared = (requested.y() * requested.y() + requested.x() * requested.x())
+                + requested.z() * requested.z();
+        if (lengthSquared > 256.0f) {
+            float length = (float) Math.sqrt(lengthSquared);
+            requested = new FloatVector((requested.x() / length) * 16.0f,
+                    (requested.y() / length) * 16.0f, (requested.z() / length) * 16.0f);
+        }
         float feetY = state.position().y();
         boolean descending = state.descendingScaffold();
-        if (state.sneaking() && state.onGround() && requested.y() <= 0.0f) {
-            requested = avoidEdge(state.boundingBox(), requested, world, feetY, descending);
-            state.velocity(requested);
-        }
 
         FloatBox original = state.boundingBox();
-        List<FloatBox> collisions = solid(world.collisionBoxes(original.extend(requested)), world,
-                feetY, descending);
-        Resolution collision = resolve(original, requested, collisions, state.stuckInCollider());
+        FloatBox region = searchRegion(original, requested, MovementConstants.STEP_HEIGHT);
+        List<FloatBox> collisions = solid(world.collisionBoxes(region), world, original, feetY,
+                descending);
+
+        if (state.sneaking() && state.onGround()) {
+            FloatVector clipped = avoidEdge(original, requested, collisions);
+            float vx = Math.abs(clipped.x()) <= MovementConstants.FLT_EPSILON ? 0.0f : stored.x();
+            float vz = Math.abs(clipped.z()) <= MovementConstants.FLT_EPSILON ? 0.0f : stored.z();
+            stored = new FloatVector(vx, stored.y(), vz);
+            requested = clipped;
+        }
+
+        float limit = recoveryLimit(state.recoveryFlags());
+        Resolution collision = resolve(original, requested, collisions, limit);
         FloatVector resolved = collision.movement();
-        boolean penetrated = collision.penetrated();
 
-        state.stuckInCollider(state.penetratedLastFrame() && penetrated);
-        state.penetratedLastFrame(penetrated);
-
-        boolean xCollision = requested.x() != resolved.x();
-        boolean yCollision = requested.y() != resolved.y();
-        boolean zCollision = requested.z() != resolved.z();
-        boolean mayStep = state.onGround() || yCollision && requested.y() < 0.0f;
+        boolean mayStep = state.onGround()
+                || requested.y() < 0.0f && requested.y() != resolved.y();
         boolean completedStep = false;
 
-        if (mayStep && (xCollision || zCollision)) {
-            Resolution step = autoStep(original, requested, collisions, state.stuckInCollider());
-            boolean stepBlocked = !solid(world.collisionBoxes(step.box()), world, feetY, descending)
-                    .isEmpty();
-            if (!stepBlocked && resolved.horizontalLengthSquared() < step.movement().horizontalLengthSquared()) {
-                float normalDistance = collision.box().feetPosition().subtract(state.client().position()).length();
-                float stepDistance = step.box().feetPosition().subtract(state.client().position()).length();
-                if (normalDistance > correctionThreshold || stepDistance <= normalDistance) {
-                    collision = step;
-                    resolved = step.movement();
-                    completedStep = true;
-                    if (state.legacySlideOffset()) {
-                        state.slideOffset(state.slideOffsetX() * MovementConstants.SLIDE_OFFSET_MULTIPLIER,
-                                state.slideOffsetY() * MovementConstants.SLIDE_OFFSET_MULTIPLIER
-                                        + step.upMovement().y());
-                    }
+        if (mayStep && (requested.x() != resolved.x() || requested.z() != resolved.z())) {
+            Resolution step = autoStep(original, requested, collisions, limit);
+            boolean stepBlocked = false;
+            for (FloatBox other : collisions) {
+                if (step.box().intersects(other)) {
+                    stepBlocked = true;
+                    break;
+                }
+            }
+            float before = resolved.z() * resolved.z() + resolved.x() * resolved.x();
+            float after = step.movement().x() * step.movement().x()
+                    + step.movement().z() * step.movement().z();
+            if (!stepBlocked && before < after) {
+                collision = step;
+                resolved = step.movement();
+                completedStep = true;
+                if (state.legacySlideOffset()) {
+                    state.slideOffset(state.slideOffsetX() * MovementConstants.SLIDE_OFFSET_MULTIPLIER,
+                            state.slideOffsetY() * MovementConstants.SLIDE_OFFSET_MULTIPLIER
+                                    + step.upMovement().y());
                 }
             }
         }
@@ -66,28 +80,142 @@ public final class MovementCollisionEngine {
         }
         state.position(endPosition);
 
-        xCollision = Math.abs(requested.x() - resolved.x()) >= COLLISION_EPSILON;
-        yCollision = Math.abs(requested.y() - resolved.y()) >= COLLISION_EPSILON;
-        zCollision = Math.abs(requested.z() - resolved.z()) >= COLLISION_EPSILON;
+        float epsilon = MovementConstants.FLT_EPSILON;
+        float dy = Math.abs(requested.y() - resolved.y());
+        boolean xCollision = Math.abs(requested.x() - resolved.x()) > epsilon;
+        boolean yCollision = !(dy <= epsilon);
+        boolean zCollision = Math.abs(requested.z() - resolved.z()) > epsilon;
         state.collisions(xCollision, yCollision, zCollision);
         state.onGround(yCollision && requested.y() < 0.0f
-                || state.onGround() && !yCollision && Math.abs(requested.y()) <= COLLISION_EPSILON);
-        if (state.riptideActive()) {
-            state.velocity(new FloatVector(xCollision ? 0.0f : requested.x(), requested.y(),
-                    zCollision ? 0.0f : requested.z()));
-        } else {
-            state.velocity(resolved);
-        }
+                || state.onGround() && !yCollision && requested.y() == 0.0f);
+        // the stored velocity, reset per collided axis; every vertical collision ends with vy = 0
+        state.velocity(new FloatVector(xCollision ? 0.0f : stored.x(),
+                yCollision ? 0.0f : stored.y(), zCollision ? 0.0f : stored.z()));
+        // the recovery flags follow the summed penetration of the resolved move
+        state.recoveryFlags(updateRecovery(state.recoveryFlags(), collision.penetrated(),
+                state.pushTowardsClosestSpace()));
         updateSupportingBlock(state, world, requested);
+        return new MoveOutcome(requested, resolved,
+                selectSupportingShape(collision.box(), collisions));
+    }
+
+    /**
+     * The request actually swept, the displacement it resolved to, and the block of the shape the
+     * landing reads its surface from (null when none).
+     */
+    public record MoveOutcome(FloatVector requested, FloatVector resolved,
+                              MovementBlockPosition surface) {
+    }
+
+    /** BDS recovery limit: once penetrated twice (or pushed) and not disabled, no push-out at all. */
+    static float recoveryLimit(int flags) {
+        boolean suppress = (flags & 8) == 0 && (flags & 0x15) != 0;
+        return suppress ? 0.0f : 1.0f;
+    }
+
+    static int updateRecovery(int flags, boolean penetrated, boolean pushTowardsClosestSpace) {
+        flags = (flags & ~0x10) | (pushTowardsClosestSpace ? 0x10 : 0);
+        if (penetrated) {
+            flags |= (flags & 2) != 0 ? 4 : 2;
+        } else {
+            flags &= 0x19;
+        }
+        return flags;
+    }
+
+    /** BDS move search region: swept, raised, combined and sneak-edge boxes, plus the probes. */
+    static FloatBox searchRegion(FloatBox box, FloatVector movement, float stepHeight) {
+        float[] b = {box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()};
+        float[] m = {movement.x(), movement.y(), movement.z()};
+        float[] swept = expand(b, m);
+        float[] raised = expand(b, new float[]{0.0f, stepHeight, 0.0f});
+        float[] combined = expand(b, new float[]{m[0], stepHeight + m[1], m[2]});
+        float[] inset = b.clone();
+        for (int axis : new int[]{0, 2}) {
+            inset[axis] += 0.025f;
+            inset[axis + 3] -= 0.025f;
+        }
+        for (int axis = 0; axis < 3; axis++) {
+            if (inset[axis] > inset[axis + 3]) {
+                inset[axis] = inset[axis + 3] = (b[axis] + b[axis + 3]) * 0.5f;
+            }
+        }
+        float[] edge = new float[6];
+        for (int axis : new int[]{0, 2}) {
+            edge[axis] = Math.min(Math.min(inset[axis] + m[axis], inset[axis]), swept[axis]);
+            edge[axis + 3] = Math.max(Math.max(inset[axis + 3] + m[axis], inset[axis + 3]),
+                    swept[axis + 3]);
+        }
+        float drop = stepHeight * -1.01f;
+        edge[1] = Math.min(inset[1] + drop, swept[1]);
+        edge[4] = Math.max(inset[4] + drop, swept[4]);
+        float[] r = new float[6];
+        for (int axis = 0; axis < 3; axis++) {
+            r[axis] = Math.min(Math.min(Math.min(raised[axis], swept[axis]), combined[axis]), edge[axis]);
+            r[axis + 3] = Math.max(Math.max(Math.max(raised[axis + 3], swept[axis + 3]),
+                    combined[axis + 3]), edge[axis + 3]);
+        }
+        r[0] = Math.min(r[0], b[0]);
+        r[2] = Math.min(r[2], b[2]);
+        r[3] = Math.max(r[3], b[3]);
+        r[5] = Math.max(r[5], b[5]);
+        r[1] = Math.min(b[1] - (Math.abs(m[1]) + 0.2f), r[1]);
+        r[4] = Math.max(b[4] + 0.08f, r[4]);
+        return new FloatBox(r[0], r[1], r[2], r[3], r[4], r[5]);
+    }
+
+    private static float[] expand(float[] bounds, float[] delta) {
+        float[] out = bounds.clone();
+        for (int axis = 0; axis < 3; axis++) {
+            if (delta[axis] < 0) out[axis] += delta[axis];
+            else if (delta[axis] > 0) out[axis + 3] += delta[axis];
+        }
+        return out;
+    }
+
+    /** BDS supporting shape: the shape centre closest below minY - 0.2, ties by centre distance. */
+    static MovementBlockPosition selectSupportingShape(FloatBox body, List<FloatBox> shapes) {
+        float y = body.minY() - 0.2f;
+        float x = center(body.minX(), body.maxX());
+        float z = center(body.minZ(), body.maxZ());
+        float bestDelta = Float.MAX_VALUE;
+        FloatBox best = null;
+        for (FloatBox shape : shapes) {
+            float delta = y - center(shape.minY(), shape.maxY());
+            if (!(delta >= 0)) continue;
+            if (delta < bestDelta) {
+                bestDelta = delta;
+                best = shape;
+            } else if (best != null && delta == bestDelta
+                    && centerDistance(shape, x, y, z) < centerDistance(best, x, y, z)) {
+                best = shape;
+            }
+        }
+        if (best == null || !(best.minX() < best.maxX() && best.maxY() > best.minY()
+                && best.maxZ() > best.minZ())) {
+            return null;
+        }
+        return new MovementBlockPosition(floor(best.minX()), floor(best.minY()), floor(best.minZ()));
+    }
+
+    private static float center(float low, float high) {
+        return ((high - low) * 0.5f) + low;
+    }
+
+    private static float centerDistance(FloatBox box, float x, float y, float z) {
+        float dx = center(box.minX(), box.maxX()) - x;
+        float dy = center(box.minY(), box.maxY()) - y;
+        float dz = center(box.minZ(), box.maxZ()) - z;
+        return (dx * dx + dy * dy) + dz * dz;
     }
 
     public static BoxCollision collide(FloatBox box, FloatVector requested, boolean wasOnGround,
                                        List<FloatBox> collisions) {
-        Resolution collision = resolve(box, requested, collisions, false);
+        Resolution collision = resolve(box, requested, collisions, 1.0f);
         FloatVector resolved = collision.movement();
         boolean mayStep = wasOnGround || requested.y() != resolved.y() && requested.y() < 0.0f;
         if (mayStep && (requested.x() != resolved.x() || requested.z() != resolved.z())) {
-            Resolution step = autoStep(box, requested, collisions, false);
+            Resolution step = autoStep(box, requested, collisions, 1.0f);
             boolean stepBlocked = false;
             for (FloatBox other : collisions) {
                 if (step.box().intersects(other)) {
@@ -99,38 +227,36 @@ public final class MovementCollisionEngine {
                 resolved = step.movement();
             }
         }
-        boolean horizontal = Math.abs(requested.x() - resolved.x()) >= COLLISION_EPSILON
-                || Math.abs(requested.z() - resolved.z()) >= COLLISION_EPSILON;
-        boolean vertical = Math.abs(requested.y() - resolved.y()) >= COLLISION_EPSILON;
+        boolean horizontal = Math.abs(requested.x() - resolved.x()) > COLLISION_EPSILON
+                || Math.abs(requested.z() - resolved.z()) > COLLISION_EPSILON;
+        boolean vertical = !(Math.abs(requested.y() - resolved.y()) <= COLLISION_EPSILON);
         return new BoxCollision(resolved, horizontal, vertical);
     }
 
     private static Resolution resolve(FloatBox original, FloatVector movement,
-                                      List<FloatBox> collisions, boolean oneWay) {
+                                      List<FloatBox> collisions, float limit) {
         FloatBox box = original;
-        float[] penetration = new float[3];
+        float[] penetration = new float[1];
 
         FloatVector yMovement = new FloatVector(0.0f, movement.y(), 0.0f);
-        yMovement = clipAll(collisions, box, yMovement, oneWay, penetration);
+        yMovement = clipAll(collisions, box, yMovement, limit, penetration);
         box = box.offset(yMovement);
 
         FloatVector xMovement = new FloatVector(movement.x(), 0.0f, 0.0f);
-        xMovement = clipAll(collisions, box, xMovement, oneWay, penetration);
+        xMovement = clipAll(collisions, box, xMovement, limit, penetration);
         box = box.offset(xMovement);
 
         FloatVector zMovement = new FloatVector(0.0f, 0.0f, movement.z());
-        zMovement = clipAll(collisions, box, zMovement, oneWay, penetration);
+        zMovement = clipAll(collisions, box, zMovement, limit, penetration);
         box = box.offset(zMovement);
 
         FloatVector result = yMovement.add(xMovement).add(zMovement);
-        float penetrationSquared = penetration[0] * penetration[0]
-                + penetration[1] * penetration[1] + penetration[2] * penetration[2];
-        return new Resolution(box, result, penetrationSquared >= PENETRATION_EPSILON_SQUARED,
+        return new Resolution(box, result, penetration[0] >= PENETRATION_EPSILON,
                 FloatVector.ZERO);
     }
 
     private static Resolution autoStep(FloatBox original, FloatVector movement,
-                                       List<FloatBox> collisions, boolean oneWay) {
+                                       List<FloatBox> collisions, float limit) {
         List<FloatBox> filtered = new ArrayList<>(collisions.size());
         for (FloatBox collision : collisions) {
             if (collision.minY() < original.maxY()) {
@@ -140,42 +266,41 @@ public final class MovementCollisionEngine {
 
         FloatBox box = original;
         FloatVector up = new FloatVector(0.0f, MovementConstants.STEP_HEIGHT, 0.0f);
-        up = clipAll(filtered, box, up, oneWay, null);
+        up = clipAll(filtered, box, up, limit, null);
         box = box.offset(up);
 
         FloatVector x = new FloatVector(movement.x(), 0.0f, 0.0f);
-        x = clipAll(filtered, box, x, oneWay, null);
+        x = clipAll(filtered, box, x, limit, null);
         box = box.offset(x);
 
         FloatVector z = new FloatVector(0.0f, 0.0f, movement.z());
-        z = clipAll(filtered, box, z, oneWay, null);
+        z = clipAll(filtered, box, z, limit, null);
         box = box.offset(z);
 
         FloatVector down = up.multiply(-1.0f);
-        down = clipAll(filtered, box, down, oneWay, null);
+        down = clipAll(filtered, box, down, limit, null);
         box = box.offset(down);
         return new Resolution(box, up.add(x).add(z).add(down), false, up);
     }
 
     private static FloatVector clipAll(List<FloatBox> collisions, FloatBox moving,
-                                       FloatVector movement, boolean oneWay, float[] penetration) {
+                                       FloatVector movement, float limit, float[] penetration) {
         FloatVector result = movement;
         for (int index = collisions.size() - 1; index >= 0; index--) {
-            ClipResult clipped = clip(collisions.get(index), moving, result, oneWay);
+            ClipResult clipped = clip(collisions.get(index), moving, result, limit);
             result = clipped.movement();
-            if (penetration != null
-                    && penetration[clipped.axis()] < clipped.penetration()) {
-                penetration[clipped.axis()] = clipped.penetration();
+            if (penetration != null) {
+                penetration[0] += clipped.penetration();
             }
         }
         return result;
     }
 
     private static ClipResult clip(FloatBox stationary, FloatBox moving,
-                                   FloatVector movement, boolean oneWay) {
-        if (stationary.minX() == stationary.maxX()
-                && stationary.minY() == stationary.maxY()
-                && stationary.minZ() == stationary.maxZ()) {
+                                   FloatVector movement, float limit) {
+        if (stationary.maxX() <= stationary.minX()
+                || stationary.maxY() <= stationary.minY()
+                || stationary.maxZ() <= stationary.minZ()) {
             return new ClipResult(movement, 0, 0.0f);
         }
 
@@ -195,8 +320,8 @@ public final class MovementCollisionEngine {
         for (int axis = 0; axis < 3; axis++) {
             float minimum = movingMaximum[axis] - stationaryMinimum[axis];
             float maximum = stationaryMaximum[axis] - movingMinimum[axis];
-            if (Math.abs(minimum) <= 1.0E-7f) minimum = 0.0f;
-            if (Math.abs(maximum) <= 1.0E-7f) maximum = 0.0f;
+            if (Math.abs(minimum) <= 1.0E-6f) minimum = 0.0f;
+            if (Math.abs(maximum) <= 1.0E-6f) maximum = 0.0f;
 
             float positiveMinimum = Math.max(0.0f, minimum);
             float positiveMaximum = Math.max(0.0f, maximum);
@@ -230,7 +355,8 @@ public final class MovementCollisionEngine {
             int axis = 0;
             if (penetration[1] < penetration[axis]) axis = 1;
             if (penetration[2] < penetration[axis]) axis = 2;
-            if (!oneWay) {
+            // past the recovery limit (or once stuck) the contact clips instead of pushing out
+            if (!(minimumPenetration > limit)) {
                 float desired = penetration[axis] * normal[axis];
                 requested[axis] = desired > 0.0f
                         ? Math.max(desired, requested[axis])
@@ -249,54 +375,97 @@ public final class MovementCollisionEngine {
         return new ClipResult(vector(requested), 0, 0.0f);
     }
 
-    private static FloatVector avoidEdge(FloatBox box, FloatVector movement,
-                                         MovementWorldView world, float feetY, boolean descending) {
-        FloatBox support = new FloatBox(box.minX() + EDGE_INSET, box.minY(), box.minZ() + EDGE_INSET,
-                box.maxX() - EDGE_INSET, box.maxY(), box.maxZ() - EDGE_INSET);
+    /** BDS sneak clipping against the cached shapes (body inset 0.025, drop stepHeight * 1.01). */
+    private static FloatVector avoidEdge(FloatBox box, FloatVector movement, List<FloatBox> shapes) {
+        float[] body = {box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()};
+        float[] original = body.clone();
+        for (int axis : new int[]{0, 2}) {
+            body[axis] = body[axis] + EDGE_INSET;
+            body[axis + 3] = body[axis + 3] - EDGE_INSET;
+        }
+        for (int axis = 0; axis < 3; axis++) {
+            if (body[axis] > body[axis + 3]) {
+                float center = (original[axis] + original[axis + 3]) * 0.5f;
+                body[axis] = center;
+                body[axis + 3] = center;
+            }
+        }
+        float drop = MovementConstants.STEP_HEIGHT * 1.01f;
         float x = movement.x();
         float z = movement.z();
-        while (x != 0.0f && !supported(support, x, 0.0f, world, feetY, descending)) x = reduce(x);
-        while (z != 0.0f && !supported(support, 0.0f, z, world, feetY, descending)) z = reduce(z);
-        while (x != 0.0f && z != 0.0f && !supported(support, x, z, world, feetY, descending)) {
+        while (x != 0.0f && !supported(body, drop, x, 0.0f, shapes)) x = reduce(x);
+        while (z != 0.0f && !supported(body, drop, 0.0f, z, shapes)) z = reduce(z);
+        while ((x != 0.0f || z != 0.0f) && !supported(body, drop, x, z, shapes)) {
             x = reduce(x);
             z = reduce(z);
         }
         return new FloatVector(x, movement.y(), z);
     }
 
-    private static boolean supported(FloatBox box, float x, float z, MovementWorldView world,
-                                     float feetY, boolean descending) {
-        FloatBox moved = box.offset(new FloatVector(x,
-                -MovementConstants.STEP_HEIGHT * 1.01f, z));
-        return !solid(world.collisionBoxes(moved), world, feetY, descending).isEmpty();
+    private static boolean supported(float[] body, float drop, float x, float z, List<FloatBox> shapes) {
+        float x0 = x + body[0];
+        float x1 = x + body[3];
+        float y0 = body[1] - drop;
+        float y1 = body[4] - drop;
+        float z0 = z + body[2];
+        float z1 = z + body[5];
+        for (FloatBox box : shapes) {
+            if (x1 > box.minX() && x0 < box.maxX() && y1 > box.minY() && y0 < box.maxY()
+                    && z1 > box.minZ() && z0 < box.maxZ()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
-     * Drops the scaffolding surfaces that are not solid for these feet:
-     * scaffolding only holds a player standing on its top who is not
-     * descending through it, and lets them through from the sides and below.
+     * Scaffolding as BDS collides it: its own shapes are replaced by one full cube, present only
+     * when the block is stable (stability != 7), the actor is not falling through, its feet are at
+     * or above the block top (1e-6 tolerance) and it overlaps the cell horizontally.
      */
     public static List<FloatBox> solid(List<FloatBox> boxes, MovementWorldView world, float feetY,
                                        boolean descending) {
+        return solid(boxes, world, null, feetY, descending);
+    }
+
+    public static List<FloatBox> solid(List<FloatBox> boxes, MovementWorldView world, FloatBox actor,
+                                       float feetY, boolean descending) {
         List<FloatBox> kept = null;
+        java.util.Set<Long> added = null;
         for (int index = 0; index < boxes.size(); index++) {
             FloatBox box = boxes.get(index);
-            boolean scaffolding = world.block(floor(box.minX()), floor(box.minY()), floor(box.minZ()))
-                    .named("scaffolding");
-            boolean passable = scaffolding
-                    && (descending || feetY < box.maxY() - SCAFFOLDING_TOP_TOLERANCE);
-            if (passable && kept == null) {
+            int x = floor(box.minX());
+            int y = floor(box.minY());
+            int z = floor(box.minZ());
+            MovementBlockView block = world.block(x, y, z);
+            boolean scaffolding = block.named("scaffolding");
+            if (!scaffolding) {
+                if (kept != null) kept.add(box);
+                continue;
+            }
+            if (kept == null) {
                 kept = new ArrayList<>(boxes.subList(0, index));
-            } else if (!passable && kept != null) {
-                kept.add(box);
+                added = new java.util.HashSet<>();
+            }
+            boolean supports = block.scaffoldingStability() != 7 && !descending
+                    && feetY >= (float) (y + 1) - SCAFFOLDING_TOP_TOLERANCE
+                    && (actor == null || actor.maxX() > x && actor.minX() < x + 1
+                    && actor.maxZ() > z && actor.minZ() < z + 1);
+            long key = ((long) x << 42) ^ ((long) (y & 0x1FFFFF) << 21) ^ (z & 0x1FFFFF);
+            if (supports && added.add(key)) {
+                kept.add(new FloatBox(x, y, z, x + 1.0f, y + 1.0f, z + 1.0f));
             }
         }
         return kept == null ? boxes : kept;
     }
 
     private static float reduce(float value) {
-        if (value < EDGE_STEP && value >= -EDGE_STEP) return 0.0f;
-        return value > 0.0f ? value - EDGE_STEP : value + EDGE_STEP;
+        if (value >= 0.0f) {
+            float next = value - EDGE_STEP;
+            return next <= value ? Math.max(next, 0.0f) : value;
+        }
+        float next = value + EDGE_STEP;
+        return next <= 0.0f ? Math.max(next, value) : 0.0f;
     }
 
     private static void updateSupportingBlock(AuthoritativeMotionState state,

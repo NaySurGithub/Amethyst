@@ -74,13 +74,16 @@ final class GlidePredictionTest {
     }
 
     @Test
-    void serverClearedGravity_keepsTheGliderLevel() {
-        AuthoritativeMotionState state = glider(0.0f, false);
-        state.affectedByGravity(false);
+    void serverClearedGravity_doesNotChangeTheGlideMove() {
+        // the BDS glide move has no gravity flag: a cleared flag glides like a normal one
+        AuthoritativeMotionState level = glider(0.0f, false);
+        AuthoritativeMotionState cleared = glider(0.0f, false);
+        cleared.affectedByGravity(false);
 
-        tick(state);
+        tick(level);
+        tick(cleared);
 
-        assertEquals(0.0f, state.velocity().y(), DELTA);
+        assertEquals(level.velocity().y(), cleared.velocity().y(), 0.0f);
     }
 
     @Test

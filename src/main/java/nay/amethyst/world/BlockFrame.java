@@ -22,7 +22,9 @@ public record BlockFrame(
         Vector3 flow,
         int bubbleDirection,
         List<Aabb> collisions,
-        StairFrame stair
+        StairFrame stair,
+        int fluidDepth,
+        int scaffoldingStability
 ) {
     private static final float MUD_SINK = 0.125f;
 
@@ -31,7 +33,7 @@ public record BlockFrame(
     }
 
     private static final BlockFrame AIR = new BlockFrame("minecraft:air", 0.6, false, false, false,
-            0, Vector3.ZERO, 0, List.of(), null);
+            0, Vector3.ZERO, 0, List.of(), null, 0, -1);
 
     public static BlockFrame capture(Block block) {
         if (block.isAir()) {
@@ -69,8 +71,11 @@ public record BlockFrame(
         int bubble = block instanceof BlockBubbleColumn column ? (column.isDragDown() ? -1 : 1) : 0;
         StairFrame stair = block instanceof BlockStairs stairs
                 ? new StairFrame(stairs.getBlockFace(), stairs.isUpsideDown()) : null;
+        int depth = block instanceof BlockLiquid liquid ? liquid.getLiquidDepth() : 0;
+        int stability = block instanceof org.powernukkitx.block.BlockScaffolding scaffolding
+                ? scaffolding.getStability() : -1;
         return new BlockFrame(block.getId(), movementFriction(block), water, lava,
-                block.canBeClimbed(), fluidHeight, flow, bubble, collisions, stair);
+                block.canBeClimbed(), fluidHeight, flow, bubble, collisions, stair, depth, stability);
     }
 
     public static double movementFriction(Block block) {
@@ -90,12 +95,14 @@ public record BlockFrame(
                 Math.max(primary.fluidHeight, extra.fluidHeight),
                 extra.flow.lengthSquared() > 0 ? extra.flow : primary.flow,
                 extra.bubbleDirection != 0 ? extra.bubbleDirection : primary.bubbleDirection,
-                primary.collisions, primary.stair);
+                primary.collisions, primary.stair,
+                extra.water || extra.lava ? extra.fluidDepth : primary.fluidDepth,
+                primary.scaffoldingStability);
     }
 
     public BlockFrame withCollisions(List<Aabb> collisions) {
         return new BlockFrame(id, friction, water, lava, climbable, fluidHeight, flow,
-                bubbleDirection, collisions, stair);
+                bubbleDirection, collisions, stair, fluidDepth, scaffoldingStability);
     }
 
     public boolean relevant() {

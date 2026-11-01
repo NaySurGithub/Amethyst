@@ -1,9 +1,9 @@
 package nay.amethyst.simulation.movement;
 
-/** Elytra flight, driven by the look vector. */
+/** Elytra flight, driven by the look vector (Bedrock 1.26.52 / BDS glide move arithmetic). */
 public final class GlidePredictionEngine extends PredictionEngine {
 
-    private static final float DEGREES_TO_RADIANS = (float) Math.PI / 180.0f;
+    private static final float NEGATIVE_PI = Float.intBitsToFloat(0xc0490fdb);
 
     public GlidePredictionEngine(AuthoritativeMotionState state, MovementWorldView world,
                                  MovementCollisionEngine collisions, float correctionThreshold) {
@@ -12,53 +12,68 @@ public final class GlidePredictionEngine extends PredictionEngine {
 
     @Override
     public MovementSimulator.SimulationResult run() {
-        applyKnockback();
-        float yaw = state.rotation().z() * DEGREES_TO_RADIANS;
-        float pitch = state.rotation().x() * DEGREES_TO_RADIANS;
-        float yawCosine = MovementConstants.cos(-yaw - (float) Math.PI);
-        float yawSine = MovementConstants.sin(-yaw - (float) Math.PI);
-        float pitchCosine = MovementConstants.cos(pitch);
-        float pitchSine = MovementConstants.sin(pitch);
+        return travel(Medium.GLIDE);
+    }
 
-        float lookX = yawSine * -pitchCosine;
-        float lookY = -pitchSine;
-        float lookZ = yawCosine * -pitchCosine;
-        FloatVector velocity = state.velocity();
-        float x = velocity.x();
-        float y = velocity.y();
-        float z = velocity.z();
-        float horizontalVelocity = (float) Math.sqrt(x * x + z * z);
-        float horizontalLook = pitchCosine;
-        float squaredPitchCosine = pitchCosine * pitchCosine;
+    static float interpolateAngle(float previous, float current, float alpha) {
+        float delta = ((current - previous) + 180.0f) % 360.0f;
+        if (delta < 0) delta += 360.0f;
+        float movement = (delta - 180.0f) * alpha;
+        return movement + previous;
+    }
 
-        if (state.affectedByGravity()) {
-            float gravity = state.gravity();
-            y += -gravity + squaredPitchCosine * (gravity * 0.75f);
+    private static float sine(float coordinate) {
+        return MovementConstants.sineEntry(coordinate);
+    }
+
+    static FloatVector glide(FloatVector velocity, float previousPitch, float previousYaw,
+                             float pitchNow, float yawNow, boolean slowFalling, boolean boost) {
+        float vx = velocity.x();
+        float vy = velocity.y();
+        float vz = velocity.z();
+        float yaw = interpolateAngle(previousYaw, yawNow, 1.0f);
+        float pitch = interpolateAngle(previousPitch, pitchNow, 1.0f);
+        float yawCoordinate = ((yaw * -0.017453292f) + NEGATIVE_PI) * 10_430.378f;
+        float pitchCoordinate = (pitch * -0.017453292f) * 10_430.378f;
+        float horizontal = -sine(pitchCoordinate + 16_384.0f);
+        float lookX = horizontal * sine(yawCoordinate);
+        float lookY = sine(pitchCoordinate);
+        float lookZ = horizontal * sine(yawCoordinate + 16_384.0f);
+        float radians = pitchNow * 0.017453292f;
+        float horizontalLookSquared = lookX * lookX + lookZ * lookZ;
+        float horizontalLook = (float) Math.sqrt(horizontalLookSquared);
+        float horizontalSpeed = (float) Math.sqrt(vx * vx + vz * vz);
+        float trigCoordinate = radians * 10_430.378f;
+        float cosine = sine(trigCoordinate + 16_384.0f);
+        float lookLength = (float) Math.sqrt((lookY * lookY + lookX * lookX) + lookZ * lookZ);
+        float lift = (Math.min(lookLength / 0.4f, 1.0f) * cosine) * cosine;
+        float gravity = slowFalling ? -0.01f : -0.08f;
+        vy = vy - ((lift * 0.75f) + -1.0f) * gravity;
+        if (horizontalLookSquared > 0 && vy < 0) {
+            float descent = (vy * -0.1f) * lift;
+            vy = vy + descent;
+            vx = vx + (descent * lookX) / horizontalLook;
+            vz = vz + (descent * lookZ) / horizontalLook;
         }
-        if (y < 0.0f && horizontalLook > 0.0f) {
-            float acceleration = y * -0.1f * squaredPitchCosine;
-            y += acceleration;
-            x += lookX * acceleration / horizontalLook;
-            z += lookZ * acceleration / horizontalLook;
+        if (radians < 0) {
+            float climb = (sine(trigCoordinate) * horizontalSpeed) * -0.04f;
+            vy = vy + climb * 3.2f;
+            vx = vx - (climb * lookX) / horizontalLook;
+            vz = vz - (climb * lookZ) / horizontalLook;
         }
-        if (pitch < 0.0f && horizontalLook > 0.0f) {
-            float acceleration = horizontalVelocity * -pitchSine * 0.04f;
-            y += acceleration * 3.2f;
-            x -= lookX * acceleration / horizontalLook;
-            z -= lookZ * acceleration / horizontalLook;
+        if (horizontalLookSquared > 0) {
+            vx = vx + (horizontalSpeed * (lookX / horizontalLook) - vx) * 0.1f;
+            vz = vz + (horizontalSpeed * (lookZ / horizontalLook) - vz) * 0.1f;
         }
-        if (horizontalLook > 0.0f) {
-            x += (lookX / horizontalLook * horizontalVelocity - x) * 0.1f;
-            z += (lookZ / horizontalLook * horizontalVelocity - z) * 0.1f;
+        if (boost) {
+            vx = boosted(vx, lookX);
+            vy = boosted(vy, lookY);
+            vz = boosted(vz, lookZ);
         }
-        if (state.glideBoostTicks() > 0) {
-            x += lookX * 0.1f + (lookX * 1.5f - x) * 0.5f;
-            y += lookY * 0.1f + (lookY * 1.5f - y) * 0.5f;
-            z += lookZ * 0.1f + (lookZ * 1.5f - z) * 0.5f;
-        }
-        state.velocity(new FloatVector(x * 0.99f, y * 0.98f, z * 0.99f));
-        move();
-        state.movement(state.velocity());
-        return result(true);
+        return new FloatVector(vx * 0.99f, vy * 0.98f, vz * 0.99f);
+    }
+
+    private static float boosted(float speed, float direction) {
+        return speed + ((direction * 1.5f - speed) * 0.5f + direction * 0.1f);
     }
 }

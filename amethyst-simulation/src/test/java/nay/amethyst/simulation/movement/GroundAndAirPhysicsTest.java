@@ -17,6 +17,18 @@ final class GroundAndAirPhysicsTest {
         return state;
     }
 
+    /**
+     * Bounce restitution after a landing, with the BDS gravity correction for the part of the tick
+     * after the impact, then the 0.98 drag.
+     */
+    private static float bounce(float coefficient, float requested, float resolved) {
+        float g = MovementConstants.NORMAL_GRAVITY;
+        float root = (float) Math.sqrt((g + g) * Math.abs(resolved) + requested * requested);
+        float impact = Math.abs((Math.abs(requested) - root) / -g);
+        float y = ((1.0f - impact) * Math.signum(requested)) * g + -(requested * coefficient);
+        return y * MovementConstants.GRAVITY_MULTIPLIER;
+    }
+
     private static void tick(AuthoritativeMotionState state, MovementWorldView world) {
         new GroundAndAirPredictionEngine(state, world, new MovementCollisionEngine(),
                 MovementConstants.CORRECTION_THRESHOLD).run();
@@ -254,7 +266,10 @@ final class GroundAndAirPhysicsTest {
 
         tick(state, world);
 
-        assertEquals(0.3f * 0.4f * MovementConstants.AIR_FRICTION * 0.8f, state.velocity().x(), DELTA);
+        // friction first, then the stand-on factor |vy| * 0.2 + 0.4 with vy after gravity
+        float vy = -MovementConstants.NORMAL_GRAVITY * MovementConstants.GRAVITY_MULTIPLIER;
+        assertEquals(0.3f * MovementConstants.AIR_FRICTION * 0.8f * (Math.abs(vy) * 0.2f + 0.4f),
+                state.velocity().x(), DELTA);
     }
 
     @Test
@@ -265,8 +280,7 @@ final class GroundAndAirPhysicsTest {
 
         tick(state, world);
 
-        assertEquals((0.75f * 0.6f - MovementConstants.NORMAL_GRAVITY)
-                * MovementConstants.GRAVITY_MULTIPLIER, state.velocity().y(), DELTA);
+        assertEquals(bounce(0.75f, -0.6f, -0.4f), state.velocity().y(), DELTA);
     }
 
     @Test
@@ -277,8 +291,7 @@ final class GroundAndAirPhysicsTest {
 
         tick(state, world);
 
-        assertEquals((0.75f * 2.0f - MovementConstants.NORMAL_GRAVITY)
-                * MovementConstants.GRAVITY_MULTIPLIER, state.velocity().y(), DELTA);
+        assertEquals(bounce(0.75f, -2.0f, -1.9f), state.velocity().y(), DELTA);
     }
 
     @Test
@@ -287,7 +300,7 @@ final class GroundAndAirPhysicsTest {
         for (int y = 8; y <= 14; y++) {
             world.put(1, y, 0, TestBlockWorld.HONEY);
         }
-        AuthoritativeMotionState state = state(new FloatVector(0.7f, 10.0f, 0.5f), false);
+        AuthoritativeMotionState state = state(new FloatVector(0.8f, 10.0f, 0.5f), false);
         state.velocity(new FloatVector(0.0f, -0.5f, 0.0f));
 
         tick(state, world);

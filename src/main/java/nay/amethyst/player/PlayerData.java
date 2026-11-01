@@ -75,6 +75,7 @@ public final class PlayerData {
     public long riptideUseStartTick = Long.MIN_VALUE;
     /** Last ground position the simulation agreed with, and the target of a setback. */
     public Vector3 lastVerifiedPosition;
+    public boolean lastVerifiedOnGround;
     public Vector3 lastVerifiedVehiclePosition;
     private DirectSetback directSetback;
     private int pendingTeleportAcks;
@@ -183,7 +184,6 @@ public final class PlayerData {
     private long spearLungeUntilInputSequence;
     private List<Vector3> riptideCandidates = List.of();
     private long riptideUntilInputSequence;
-    private boolean riptideGroundStep;
     private final List<Vector3> serverMotionCandidates = new ArrayList<>();
     private long serverMotionUntilInputSequence;
     public synchronized void addPendingTeleport() {
@@ -375,10 +375,9 @@ public final class PlayerData {
         spearLungeUntilInputSequence = 0;
     }
 
-    public synchronized void setRiptideCandidates(List<Vector3> candidates, boolean groundStep) {
+    public synchronized void setRiptideCandidates(List<Vector3> candidates) {
         riptideCandidates = List.copyOf(candidates);
         riptideUntilInputSequence = inputSequence + 4;
-        riptideGroundStep = groundStep;
     }
 
     public synchronized List<Vector3> riptideCandidates() {
@@ -390,15 +389,9 @@ public final class PlayerData {
         return !riptideCandidates().isEmpty() || motion.riptideActive();
     }
 
-    public synchronized boolean riptideGroundStep() {
-        riptideCandidates();
-        return riptideGroundStep;
-    }
-
     public synchronized void clearRiptideCandidates() {
         riptideCandidates = List.of();
         riptideUntilInputSequence = 0;
-        riptideGroundStep = false;
     }
 
     public synchronized void stopRiptide() {
@@ -490,6 +483,7 @@ public final class PlayerData {
         simulationOffsetBuffer = 0.0;
         nearServerMotionTick = false;
         lastVerifiedPosition = null;
+        lastVerifiedOnGround = false;
         lastVerifiedVehiclePosition = null;
         meleeKnockbackPending = false;
         expectedMeleeKnockback = null;

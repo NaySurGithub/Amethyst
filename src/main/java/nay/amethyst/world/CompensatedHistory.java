@@ -59,8 +59,8 @@ public final class CompensatedHistory {
         Map<Long, EntityFrame> entities = clientEntities.snapshotFrames(position, ENTITY_RADIUS);
 
         PhysicsFrame physics = new PhysicsFrame(player.getMovementSpeed(), attribute(player,
-                Attribute.UNDER_WATER_MOVEMENT_SPEED, player.getDefaultUnderWaterSpeed()), attribute(player,
-                Attribute.LAVA_MOVEMENT_SPEED, player.getDefaultLavaMovementSpeed()),
+                Attribute.UNDER_WATER_MOVEMENT_SPEED, PLAYER_FLUID_MOVEMENT), attribute(player,
+                Attribute.LAVA_MOVEMENT_SPEED, PLAYER_FLUID_MOVEMENT),
                 knockbackResistance(player), player.getGravity(),
                 amplifier(player, EffectType.JUMP_BOOST), amplifier(player, EffectType.LEVITATION),
                 player.hasEffect(EffectType.SLOW_FALLING), player.isSprinting(), player.isSwimming(),
@@ -221,6 +221,13 @@ public final class CompensatedHistory {
         Effect effect = player.getEffect(type);
         return effect == null ? -1 : effect.getAmplifier();
     }
+
+    /**
+     * Bedrock registers underwater_movement and lava_movement at 0.02 for players. The server's own
+     * entity defaults (0.07 / 0.05) are never sent to the client, so they must not drive the
+     * prediction when the attribute is absent.
+     */
+    static final double PLAYER_FLUID_MOVEMENT = 0.02;
 
     private static double attribute(Player player, int id, double fallback) {
         Attribute attribute = player.getAttributes().get(id);

@@ -959,11 +959,15 @@ public final class PacketListener implements Listener {
         }
 
         data.riptideUseStartTick = Long.MIN_VALUE;
-        FloatVector impulse = RiptidePhysics.impulse(yaw, pitch, level);
+        // launched from the simulated ground; the head test decides the in-water variant
+        FloatVector impulse = RiptidePhysics.impulse(yaw, pitch, level, data.motion.onGround(),
+                data.motion.inWater(), data.motion.headInWater());
         Vector3 current = data.predictedVelocity == null ? Vector3.ZERO : data.predictedVelocity;
+        // binary32 addition, as the spin start adds the push to the stored velocity
         Vector3 combined = data.motion.immobile() ? current
-                : current.add(impulse.x(), impulse.y(), impulse.z());
-        data.setRiptideCandidates(List.of(combined), player.isOnGround());
+                : new Vector3((float) current.x + impulse.x(), (float) current.y + impulse.y(),
+                        (float) current.z + impulse.z());
+        data.setRiptideCandidates(List.of(combined));
     }
 
     private static Item riptideTrident(Player player) {

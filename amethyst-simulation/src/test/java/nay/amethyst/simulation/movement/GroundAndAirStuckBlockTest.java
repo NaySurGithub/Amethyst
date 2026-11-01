@@ -18,6 +18,18 @@ final class GroundAndAirStuckBlockTest {
         return state;
     }
 
+    /**
+     * Block slowdowns are sensed at the end of a tick and scale the next move request (BDS order):
+     * run one tick inside the block to store the multiplier, then restore the start position.
+     */
+    private static void primeContact(AuthoritativeMotionState state, MovementWorldView world) {
+        FloatVector start = state.position();
+        boolean onGround = state.onGround();
+        tick(state, world);
+        state.initialize(start, onGround);
+        state.velocity(FloatVector.ZERO);
+    }
+
     private static void tick(AuthoritativeMotionState state, MovementWorldView world) {
         new GroundAndAirPredictionEngine(state, world, new MovementCollisionEngine(),
                 MovementConstants.CORRECTION_THRESHOLD).run();
@@ -27,6 +39,7 @@ final class GroundAndAirStuckBlockTest {
     void powderSnow_insideForManyTicks_verticalVelocityNeverCompounds() {
         TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.POWDER_SNOW);
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        primeContact(state, world);
         state.velocity(new FloatVector(0.0f, 0.42f, 0.0f));
 
         for (int index = 0; index < 8; index++) {
@@ -40,6 +53,7 @@ final class GroundAndAirStuckBlockTest {
     void powderSnow_inside_clearsVelocityAfterTheMove() {
         TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.POWDER_SNOW);
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        primeContact(state, world);
         state.velocity(new FloatVector(0.5f, 0.5f, 0.5f));
 
         tick(state, world);
@@ -81,6 +95,7 @@ final class GroundAndAirStuckBlockTest {
     void cobweb_inside_clearsVelocityAfterTheMove() {
         TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.COBWEB);
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        primeContact(state, world);
         state.velocity(new FloatVector(0.5f, 0.5f, 0.5f));
 
         tick(state, world);
@@ -94,6 +109,7 @@ final class GroundAndAirStuckBlockTest {
     void cobweb_inside_barelyMovesThePlayer() {
         TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.COBWEB);
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        primeContact(state, world);
         state.velocity(new FloatVector(0.8f, 0.0f, 0.0f));
 
         tick(state, world);
@@ -106,6 +122,7 @@ final class GroundAndAirStuckBlockTest {
         TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.POWDER_SNOW)
                 .put(0, 10, 0, TestBlockWorld.COBWEB);
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        primeContact(state, world);
         state.velocity(new FloatVector(0.8f, 0.0f, 0.0f));
 
         tick(state, world);
@@ -117,6 +134,7 @@ final class GroundAndAirStuckBlockTest {
     void sweetBerryBush_inside_clearsVelocityAfterTheMove() {
         TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.SWEET_BERRY_BUSH);
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        primeContact(state, world);
         state.velocity(new FloatVector(0.5f, 0.5f, 0.5f));
 
         tick(state, world);
@@ -130,6 +148,7 @@ final class GroundAndAirStuckBlockTest {
     void sweetBerryBush_inside_movesThePlayerByTheSlowedVelocity() {
         TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.SWEET_BERRY_BUSH);
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        primeContact(state, world);
         state.velocity(new FloatVector(0.5f, 0.0f, 0.0f));
 
         tick(state, world);
@@ -141,12 +160,14 @@ final class GroundAndAirStuckBlockTest {
     void powderSnow_withLeatherBootsAndJumpHeld_climbs() {
         TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.POWDER_SNOW);
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        primeContact(state, world);
         state.wearingLeatherBoots(true);
         state.updateInput(input(10.0f, MovementInputFlag.JUMPING));
 
         tick(state, world);
 
-        assertEquals(10.0f + 0.2f * 1.5f, state.position().y(), DELTA);
+        // powder snow with leather boots is ascendable: the scaffolding lift 0.15, slowed by 1.5
+        assertEquals(10.0f + 0.15f * 1.5f, state.position().y(), DELTA);
     }
 
     @Test
@@ -165,7 +186,8 @@ final class GroundAndAirStuckBlockTest {
 
         tick(state, world);
 
-        assertEquals(10.0f + 0.2f * 1.5f, state.position().y(), DELTA);
+        // every column under the body is sensed: the powder snow beside makes it ascendable
+        assertEquals(10.0f + 0.15f, state.position().y(), DELTA);
     }
 
     @Test
@@ -184,8 +206,13 @@ final class GroundAndAirStuckBlockTest {
     void powderSnow_sneakHeld_descends() {
         TestBlockWorld world = new TestBlockWorld().fill(8, 14, TestBlockWorld.POWDER_SNOW);
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
+        primeContact(state, world);
         state.wearingLeatherBoots(true);
-        state.updateInput(input(10.0f, MovementInputFlag.SNEAKING));
+        state.updateInput(MovementInputFrame.builder()
+                .position(new FloatVector(0.5f, 10.0f + MovementConstants.PLAYER_HEIGHT_OFFSET, 0.5f))
+                .rotation(FloatVector.ZERO)
+                .flag(MovementInputFlag.SNEAKING).flag(MovementInputFlag.SNEAK_DOWN)
+                .build());
 
         tick(state, world);
 

@@ -85,7 +85,7 @@ final class MovementRegressionTest {
     void slowFalling_doesNotChangeLavaGravity() {
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
         state.slowFalling(true);
-        FluidState lava = new FluidState(false, true, 1.0f, FloatVector.ZERO, 0, false);
+        FluidState lava = new FluidState(false, true, 1.0f);
 
         new LavaPredictionEngine(state, new TestBlockWorld(), new MovementCollisionEngine(),
                 MovementConstants.CORRECTION_THRESHOLD, lava).run();
@@ -97,7 +97,7 @@ final class MovementRegressionTest {
     void lava_dragsAndPullsDownAQuarterOfGravity() {
         AuthoritativeMotionState state = state(new FloatVector(0.5f, 10.0f, 0.5f), false);
         state.velocity(new FloatVector(0.4f, 0.0f, 0.0f));
-        FluidState lava = new FluidState(false, true, 1.0f, FloatVector.ZERO, 0, false);
+        FluidState lava = new FluidState(false, true, 1.0f);
 
         new LavaPredictionEngine(state, new TestBlockWorld(), new MovementCollisionEngine(),
                 MovementConstants.CORRECTION_THRESHOLD, lava).run();
