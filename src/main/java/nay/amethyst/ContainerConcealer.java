@@ -212,6 +212,22 @@ public final class ContainerConcealer {
     }
 
     /**
+     * Drops what is remembered about one sub-chunk the player is being sent. A chunk sent as
+     * sub-chunks on request carries no blocks itself, so the real containers only reach the client
+     * here, after the covers for that chunk went out.
+     */
+    public void forgetSubChunk(Player player, int chunkX, int subChunkY, int chunkZ) {
+        PlayerView view = player == null ? null : views.get(player.getUniqueId());
+        if (view == null) {
+            return;
+        }
+        view.concealed.removeIf(key -> (unpackX(key) >> 4) == chunkX
+                && (unpackY(key) >> 4) == subChunkY
+                && (unpackZ(key) >> 4) == chunkZ);
+        view.dirty = true;
+    }
+
+    /**
      * Puts back every container hidden from a player, and forgets them. Called when they leave, and
      * when the feature is turned off.
      */

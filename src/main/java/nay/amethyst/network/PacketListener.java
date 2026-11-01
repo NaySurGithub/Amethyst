@@ -503,6 +503,14 @@ public final class PacketListener implements Listener {
         if (event.getPacket() instanceof LevelChunkPacket chunkPacket) {
             plugin.concealer().forgetChunk(player, chunkPacket.getChunkX(), chunkPacket.getChunkZ());
         }
+        if (event.getPacket() instanceof SubChunkPacket subChunkPacket) {
+            var center = subChunkPacket.getCenterPos();
+            for (var subChunk : subChunkPacket.getSubChunkData()) {
+                var offset = subChunk.getSubChunkPosOffset();
+                plugin.concealer().forgetSubChunk(player, center.getX() + offset.getX(),
+                        center.getY() + offset.getY(), center.getZ() + offset.getZ());
+            }
+        }
         if (event.getPacket() instanceof LevelChunkPacket
                 || event.getPacket() instanceof SubChunkPacket) {
             sendAcknowledgmentAfter(event, player, data, AcknowledgmentType.INITIALIZATION,
