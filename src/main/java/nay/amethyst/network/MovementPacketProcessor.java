@@ -265,7 +265,7 @@ public final class MovementPacketProcessor {
         double y = position == null ? safe.y
                 : position.y - MovementConstants.CORRECTION_HEIGHT_OFFSET;
         double z = position == null ? safe.z : position.z;
-        directTeleportSetback(player, data, x, y, z, true,
+        directTeleportSetback(player, data, x, y, z, position == null || data.lastVerifiedOnGround,
                 "position=" + new Vector3(x, y, z) + " tick=" + Math.max(0, data.lastTick), alert);
     }
 
@@ -428,7 +428,7 @@ public final class MovementPacketProcessor {
                         ? new FloatVector((float) safe.x, (float) safe.y, (float) safe.z)
                         : new FloatVector((float) player.getX(), (float) player.getY(),
                                 (float) player.getZ());
-        boolean targetOnGround = verified != null || safe != null;
+        boolean targetOnGround = verified != null ? data.lastVerifiedOnGround : safe != null;
         directTeleportSetback(player, data, target.x(), target.y(), target.z(),
                 targetOnGround,
                 "offset=" + NetworkCheckSupport.format(result.offset())
@@ -652,11 +652,15 @@ public final class MovementPacketProcessor {
         Vector3f verifiedPacketPosition = Vector3f.from(result.clientPosition().x(),
                 result.clientPosition().y() + MovementConstants.CORRECTION_HEIGHT_OFFSET,
                 result.clientPosition().z());
-        if (data.simulationOffsetBuffer <= 0.0 && result.onGround()
-                && MovementCheckSupport.serverGround(player, verifiedPacketPosition)) {
+        // any tick the simulation accepted (ground, air or fluid) is a valid setback target;
+        // a ground-only rule kept the login position for a whole swim
+        if (SetbackTargets.accepted(data.simulationOffsetBuffer, excess, result.reliable())
+                && !MovementCheckSupport.collides(player, verifiedPacketPosition)) {
             data.lastVerifiedPosition = new Vector3(result.clientPosition().x(),
                     result.clientPosition().y() + MovementConstants.CORRECTION_HEIGHT_OFFSET,
                     result.clientPosition().z());
+            data.lastVerifiedOnGround = result.onGround()
+                    && MovementCheckSupport.serverGround(player, verifiedPacketPosition);
         }
 
         double threshold = Math.max(0.05, plugin.settings().predictionBufferThreshold());

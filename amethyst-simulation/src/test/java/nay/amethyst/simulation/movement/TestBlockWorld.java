@@ -7,6 +7,7 @@ import java.util.Map;
 
 /** A world built one block at a time, so a test states only the blocks it cares about. */
 final class TestBlockWorld implements MovementWorldView {
+    private float underwaterSpeed = 0.02f;
     static final MovementBlockView STONE =
             new MovementBlockView("minecraft:stone", 0.6f, false, false, false);
     static final MovementBlockView POWDER_SNOW =
@@ -105,7 +106,12 @@ final class TestBlockWorld implements MovementWorldView {
 
     @Override
     public float underwaterSpeed() {
-        return 0.0f;
+        return underwaterSpeed;
+    }
+
+    TestBlockWorld underwaterSpeed(float value) {
+        underwaterSpeed = value;
+        return this;
     }
 
     @Override

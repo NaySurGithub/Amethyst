@@ -75,6 +75,7 @@ public final class PlayerData {
     public long riptideUseStartTick = Long.MIN_VALUE;
     /** Last ground position the simulation agreed with, and the target of a setback. */
     public Vector3 lastVerifiedPosition;
+    public boolean lastVerifiedOnGround;
     public Vector3 lastVerifiedVehiclePosition;
     private DirectSetback directSetback;
     private int pendingTeleportAcks;
@@ -482,6 +483,7 @@ public final class PlayerData {
         simulationOffsetBuffer = 0.0;
         nearServerMotionTick = false;
         lastVerifiedPosition = null;
+        lastVerifiedOnGround = false;
         lastVerifiedVehiclePosition = null;
         meleeKnockbackPending = false;
         expectedMeleeKnockback = null;
