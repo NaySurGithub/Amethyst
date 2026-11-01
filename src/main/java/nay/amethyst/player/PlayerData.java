@@ -183,7 +183,6 @@ public final class PlayerData {
     private long spearLungeUntilInputSequence;
     private List<Vector3> riptideCandidates = List.of();
     private long riptideUntilInputSequence;
-    private boolean riptideGroundStep;
     private final List<Vector3> serverMotionCandidates = new ArrayList<>();
     private long serverMotionUntilInputSequence;
     public synchronized void addPendingTeleport() {
@@ -375,10 +374,9 @@ public final class PlayerData {
         spearLungeUntilInputSequence = 0;
     }
 
-    public synchronized void setRiptideCandidates(List<Vector3> candidates, boolean groundStep) {
+    public synchronized void setRiptideCandidates(List<Vector3> candidates) {
         riptideCandidates = List.copyOf(candidates);
         riptideUntilInputSequence = inputSequence + 4;
-        riptideGroundStep = groundStep;
     }
 
     public synchronized List<Vector3> riptideCandidates() {
@@ -390,15 +388,9 @@ public final class PlayerData {
         return !riptideCandidates().isEmpty() || motion.riptideActive();
     }
 
-    public synchronized boolean riptideGroundStep() {
-        riptideCandidates();
-        return riptideGroundStep;
-    }
-
     public synchronized void clearRiptideCandidates() {
         riptideCandidates = List.of();
         riptideUntilInputSequence = 0;
-        riptideGroundStep = false;
     }
 
     public synchronized void stopRiptide() {

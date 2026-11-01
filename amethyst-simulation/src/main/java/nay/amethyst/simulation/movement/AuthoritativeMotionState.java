@@ -22,10 +22,28 @@ public final class AuthoritativeMotionState {
     private float scale = 1.0f;
     private float gravity = MovementConstants.NORMAL_GRAVITY;
     private float jumpHeight = 0.42f;
+    private float baseJumpHeight = 0.42f;
     private float fallDistance;
     private float movementSpeed = 0.1f;
     private float defaultMovementSpeed = 0.1f;
     private float airSpeed = 0.02f;
+    /** Pending block slowdown multiplier, applied to next tick's move request (BDS block slowdown). */
+    private float stuckX;
+    private float stuckY;
+    private float stuckZ;
+    private int swiftSneakLevel;
+    private boolean soulSpeed;
+    private boolean weaving;
+    private boolean inWater;
+    private boolean nearFluid;
+    private boolean headInWater;
+    private float swimAmount;
+    private int fallFlyTicks;
+    private boolean instabuild;
+    private boolean previousSneaking;
+    private boolean pushTowardsClosestSpace;
+    /** BDS collision recovery flags: 0x2/0x4 penetrated once/twice, 0x8 disabled, 0x10 push. */
+    private int recoveryFlags;
 
     private static final int MAX_KNOCKBACK_DEFERRALS = 2;
 
@@ -37,7 +55,6 @@ public final class AuthoritativeMotionState {
     private int pendingCorrections;
     private int jumpDelay;
     private int rawJumpGraceCooldown;
-    private int supportedBranchRecoveryCooldown;
     private int glideBoostTicks;
     private int supportingBlockX;
     private int supportingBlockY;
@@ -65,8 +82,6 @@ public final class AuthoritativeMotionState {
     private boolean collideY;
     private boolean collideZ;
     private boolean onGround;
-    private boolean penetratedLastFrame;
-    private boolean stuckInCollider;
     private boolean immobile;
     private boolean noClip;
     private boolean gliding;
@@ -78,7 +93,6 @@ public final class AuthoritativeMotionState {
     private boolean correctionCooldown;
     private boolean initialized;
     private boolean riptideActive;
-    private boolean riptideGroundStepPending;
 
     private int jumpBoostLevel;
     private int jumpBoostTicks;
@@ -118,23 +132,24 @@ public final class AuthoritativeMotionState {
         boolean adjustSpeed = false;
         if (startSprint && stopSprint) {
             sprinting = false;
-            airSpeed = 0.02f;
+            airSpeed = MovementConstants.AIR_SPEED;
             adjustSpeed = modernSprintTiming;
         } else if (!startSprint && !stopSprint && !serverSprintApplied && serverSprint != sprinting) {
             sprinting = serverSprint;
-            airSpeed = sprinting ? 0.026f : 0.02f;
+            airSpeed = sprinting ? MovementConstants.SPRINT_AIR_SPEED : MovementConstants.AIR_SPEED;
         } else if (startSprint) {
             sprinting = true;
-            airSpeed = 0.026f;
+            airSpeed = MovementConstants.SPRINT_AIR_SPEED;
             adjustSpeed = modernSprintTiming;
         } else if (stopSprint) {
             sprinting = false;
-            airSpeed = 0.02f;
+            airSpeed = MovementConstants.AIR_SPEED;
             adjustSpeed = modernSprintTiming && !serverUpdatedSpeed;
         }
         serverSprintApplied = true;
         if (adjustSpeed) resetMovementSpeedForSprint();
 
+        previousSneaking = sneaking;
         if (input.has(MovementInputFlag.START_SNEAKING)) {
             sneaking = true;
         } else if (input.has(MovementInputFlag.STOP_SNEAKING)) {
@@ -143,16 +158,32 @@ public final class AuthoritativeMotionState {
             sneaking = input.has(MovementInputFlag.SNEAK_DOWN);
         }
 
+        // The client sends its processed move vector (normalised, sneak and item-use scaled).
+        // Normalise past unit length, then cap each axis by the scale BDS would have applied:
+        // honest input is left unchanged, as BDS does.
+        float sideways = input.moveSideways();
+        float forward = input.moveForward();
+        float lengthSquared = forward * forward + sideways * sideways;
+        if (lengthSquared > 1.0f) {
+            float length = (float) Math.sqrt(lengthSquared);
+            forward /= length;
+            sideways /= length;
+        }
+        // the client scales by the sneak key or last tick's sneak flag, never while swimming nor in
+        // water; the cap is skipped near any fluid so a disagreeing water test cannot over-cap
         float maximumInput = 1.0f;
+        if ((pressingSneak || previousSneaking) && !swimming && !inWater && !nearFluid) {
+            maximumInput *= sneakSpeed(swiftSneakLevel);
+        }
         if (consuming) maximumInput *= MovementConstants.CONSUMING_INPUT;
-        if (sneaking) maximumInput *= MovementConstants.SNEAK_INPUT;
-        impulseSideways = MovementConstants.clamp(input.moveSideways(), -maximumInput, maximumInput) * 0.98f;
-        impulseForward = MovementConstants.clamp(input.moveForward(), -maximumInput, maximumInput) * 0.98f;
+        impulseSideways = MovementConstants.clamp(sideways, -maximumInput, maximumInput) * 0.98f;
+        impulseForward = MovementConstants.clamp(forward, -maximumInput, maximumInput) * 0.98f;
 
         jumping = input.has(MovementInputFlag.START_JUMPING)
                 || input.has(MovementInputFlag.JUMP_PRESSED_RAW);
         pressingJump = input.has(MovementInputFlag.JUMPING);
-        jumpHeight = 0.42f + jumpBoostLevel * 0.1f;
+        // (effect + base): effect = (amplifier + 1) * 0.1, base = the jump strength attribute
+        jumpHeight = (float) jumpBoostLevel * 0.1f + baseJumpHeight;
         if (!pressingJump) jumpDelay = 0;
         gravity = slowFalling ? MovementConstants.SLOW_FALLING_GRAVITY
                 : MovementConstants.NORMAL_GRAVITY;
@@ -178,7 +209,6 @@ public final class AuthoritativeMotionState {
         }
         if (jumpDelay > 0) jumpDelay--;
         if (rawJumpGraceCooldown > 0) rawJumpGraceCooldown--;
-        if (supportedBranchRecoveryCooldown > 0) supportedBranchRecoveryCooldown--;
         justDisabledFlight = false;
     }
 
@@ -259,16 +289,14 @@ public final class AuthoritativeMotionState {
         ticksSinceKnockback = Long.MAX_VALUE;
         jumpDelay = 0;
         rawJumpGraceCooldown = 0;
-        supportedBranchRecoveryCooldown = 0;
         slideOffsetX = 0.0f;
         slideOffsetY = 0.0f;
         stopRiptide();
     }
 
-    public void startRiptide(boolean groundStep) {
+    public void startRiptide() {
         riptideTicks = 0;
         riptideActive = true;
-        riptideGroundStepPending = groundStep;
     }
 
     public void finishRiptideTick() {
@@ -283,39 +311,30 @@ public final class AuthoritativeMotionState {
     public void stopRiptide() {
         riptideTicks = 0;
         riptideActive = false;
-        riptideGroundStepPending = false;
     }
 
     public boolean riptideActive() {
         return riptideActive;
     }
 
-    public boolean riptideGroundStepPending() {
-        return riptideGroundStepPending;
-    }
-
-    public void consumeRiptideGroundStep() {
-        riptideGroundStepPending = false;
-    }
-
     public FloatBox boundingBox() {
         float halfWidth = width * 0.5f * scale;
         float scaledHeight = height * scale;
         float yOffset = legacySlideOffset ? slideOffsetY : 0.0f;
-        return new FloatBox(position.x() - halfWidth + 1.0E-4f, position.y() + yOffset,
-                position.z() - halfWidth + 1.0E-4f, position.x() + halfWidth - 1.0E-4f,
-                position.y() + scaledHeight + yOffset, position.z() + halfWidth - 1.0E-4f);
+        return new FloatBox(position.x() - halfWidth, position.y() + yOffset,
+                position.z() - halfWidth, position.x() + halfWidth,
+                position.y() + scaledHeight + yOffset, position.z() + halfWidth);
     }
 
     public FloatBox clientBoundingBox() {
         float halfWidth = width * 0.5f;
         float yOffset = legacySlideOffset ? slideOffsetY : 0.0f;
         FloatVector clientPosition = client.position();
-        return new FloatBox(clientPosition.x() - halfWidth + 1.0E-4f,
-                clientPosition.y() + yOffset, clientPosition.z() - halfWidth + 1.0E-4f,
-                clientPosition.x() + halfWidth - 1.0E-4f,
+        return new FloatBox(clientPosition.x() - halfWidth,
+                clientPosition.y() + yOffset, clientPosition.z() - halfWidth,
+                clientPosition.x() + halfWidth,
                 clientPosition.y() + height + yOffset,
-                clientPosition.z() + halfWidth - 1.0E-4f);
+                clientPosition.z() + halfWidth);
     }
 
     public void teleport(FloatVector position, boolean onGround, boolean smoothed) {
@@ -353,14 +372,6 @@ public final class AuthoritativeMotionState {
             return false;
         }
         rawJumpGraceCooldown = MovementConstants.JUMP_DELAY_TICKS;
-        return true;
-    }
-
-    public boolean claimSupportedBranchRecovery() {
-        if (supportedBranchRecoveryCooldown > 0) {
-            return false;
-        }
-        supportedBranchRecoveryCooldown = MovementConstants.JUMP_DELAY_TICKS;
         return true;
     }
 
@@ -466,6 +477,11 @@ public final class AuthoritativeMotionState {
 
     public float gravity() {
         return gravity;
+    }
+
+    /** Jump strength attribute (custom jump height), 0.42 by default. */
+    public void baseJumpHeight(float value) {
+        baseJumpHeight = value;
     }
 
     public float jumpHeight() {
@@ -588,7 +604,7 @@ public final class AuthoritativeMotionState {
 
     public void sprinting(boolean value) {
         sprinting = value;
-        airSpeed = value ? 0.026f : 0.02f;
+        airSpeed = value ? MovementConstants.SPRINT_AIR_SPEED : MovementConstants.AIR_SPEED;
         movementSpeed = value ? defaultMovementSpeed * 1.3f : defaultMovementSpeed;
     }
 
@@ -630,20 +646,14 @@ public final class AuthoritativeMotionState {
         onGround = value;
     }
 
+    /** The last resolved move penetrated a shape (recovery flag 0x2 or 0x4). */
     public boolean penetratedLastFrame() {
-        return penetratedLastFrame;
+        return (recoveryFlags & 6) != 0;
     }
 
-    public void penetratedLastFrame(boolean value) {
-        penetratedLastFrame = value;
-    }
-
+    /** Push-out is suppressed: the move clips instead of recovering (BDS recovery limits of 0). */
     public boolean stuckInCollider() {
-        return stuckInCollider;
-    }
-
-    public void stuckInCollider(boolean value) {
-        stuckInCollider = value;
+        return MovementCollisionEngine.recoveryLimit(recoveryFlags) == 0.0f;
     }
 
     public boolean immobile() {
@@ -892,6 +902,123 @@ public final class AuthoritativeMotionState {
         return supportingBlockZ;
     }
 
+    /** Swift Sneak speed: min(level * 0.15 + 0.3, 1), 0.3 without the enchantment. */
+    public static float sneakSpeed(int swiftSneakLevel) {
+        if (swiftSneakLevel <= 0) return MovementConstants.SNEAK_INPUT;
+        return Math.min((float) swiftSneakLevel * 0.15f + 0.3f, 1.0f);
+    }
+
+    public int swiftSneakLevel() {
+        return swiftSneakLevel;
+    }
+
+    public void swiftSneakLevel(int value) {
+        swiftSneakLevel = Math.max(0, value);
+    }
+
+    /** Weaving effect: a first cobweb contact slows by (0.5, 0.25, 0.5) instead. */
+    public boolean weaving() {
+        return weaving;
+    }
+
+    public void weaving(boolean value) {
+        weaving = value;
+    }
+
+    public boolean soulSpeed() {
+        return soulSpeed;
+    }
+
+    public void soulSpeed(boolean value) {
+        soulSpeed = value;
+    }
+
+    public boolean nearFluid() {
+        return nearFluid;
+    }
+
+    public void nearFluid(boolean value) {
+        nearFluid = value;
+    }
+
+    /** Eye cell water test (liquid height (y + 1) - (depth / 9 - 1 / 9)). */
+    public boolean headInWater() {
+        return headInWater;
+    }
+
+    public void headInWater(boolean value) {
+        headInWater = value;
+    }
+
+    /** Swim pose blend, 0..1, +-0.1 per tick. */
+    public float swimAmount() {
+        return swimAmount;
+    }
+
+    public void swimAmount(float value) {
+        swimAmount = value;
+    }
+
+    public int fallFlyTicks() {
+        return fallFlyTicks;
+    }
+
+    public void fallFlyTicks(int value) {
+        fallFlyTicks = value;
+    }
+
+    /** Creative instant build ability (enables the glide lift while jump is held). */
+    public boolean instabuild() {
+        return instabuild;
+    }
+
+    public void instabuild(boolean value) {
+        instabuild = value;
+    }
+
+    public boolean pushTowardsClosestSpace() {
+        return pushTowardsClosestSpace;
+    }
+
+    public void pushTowardsClosestSpace(boolean value) {
+        pushTowardsClosestSpace = value;
+    }
+
+    public int recoveryFlags() {
+        return recoveryFlags;
+    }
+
+    public void recoveryFlags(int value) {
+        recoveryFlags = value;
+    }
+
+    /** Whether the last simulated tick was in water (input scaling skips sneak in water). */
+    public boolean inWater() {
+        return inWater;
+    }
+
+    public void inWater(boolean value) {
+        inWater = value;
+    }
+
+    public float stuckX() {
+        return stuckX;
+    }
+
+    public float stuckY() {
+        return stuckY;
+    }
+
+    public float stuckZ() {
+        return stuckZ;
+    }
+
+    public void stuckMultiplier(float x, float y, float z) {
+        stuckX = x;
+        stuckY = y;
+        stuckZ = z;
+    }
+
     public MotionSnapshot snapshot() {
         return new MotionSnapshot(this);
     }
@@ -920,19 +1047,23 @@ public final class AuthoritativeMotionState {
         private final int riptideTicks;
         private final long ticksSinceKnockback;
         private final int rawJumpGraceCooldown;
-        private final int supportedBranchRecoveryCooldown;
         private final boolean hasSupportingBlock;
         private final boolean onGround;
         private final boolean collideX;
         private final boolean collideY;
         private final boolean collideZ;
-        private final boolean penetratedLastFrame;
-        private final boolean stuckInCollider;
         private final boolean gliding;
         private final boolean sprinting;
         private final boolean jumping;
         private final boolean riptideActive;
-        private final boolean riptideGroundStepPending;
+        private final float stuckX;
+        private final float stuckY;
+        private final float stuckZ;
+        private final boolean inWater;
+        private final float swimAmount;
+        private final int fallFlyTicks;
+        private final int recoveryFlags;
+        private final boolean headInWater;
 
         private MotionSnapshot(AuthoritativeMotionState state) {
             position = state.position;
@@ -953,19 +1084,23 @@ public final class AuthoritativeMotionState {
             riptideTicks = state.riptideTicks;
             ticksSinceKnockback = state.ticksSinceKnockback;
             rawJumpGraceCooldown = state.rawJumpGraceCooldown;
-            supportedBranchRecoveryCooldown = state.supportedBranchRecoveryCooldown;
             hasSupportingBlock = state.hasSupportingBlock;
             onGround = state.onGround;
             collideX = state.collideX;
             collideY = state.collideY;
             collideZ = state.collideZ;
-            penetratedLastFrame = state.penetratedLastFrame;
-            stuckInCollider = state.stuckInCollider;
             gliding = state.gliding;
             sprinting = state.sprinting;
             jumping = state.jumping;
             riptideActive = state.riptideActive;
-            riptideGroundStepPending = state.riptideGroundStepPending;
+            stuckX = state.stuckX;
+            stuckY = state.stuckY;
+            stuckZ = state.stuckZ;
+            inWater = state.inWater;
+            swimAmount = state.swimAmount;
+            fallFlyTicks = state.fallFlyTicks;
+            recoveryFlags = state.recoveryFlags;
+            headInWater = state.headInWater;
         }
 
         public boolean onGround() {
@@ -1003,19 +1138,23 @@ public final class AuthoritativeMotionState {
             state.riptideTicks = riptideTicks;
             state.ticksSinceKnockback = ticksSinceKnockback;
             state.rawJumpGraceCooldown = rawJumpGraceCooldown;
-            state.supportedBranchRecoveryCooldown = supportedBranchRecoveryCooldown;
             state.hasSupportingBlock = hasSupportingBlock;
             state.onGround = onGround;
             state.collideX = collideX;
             state.collideY = collideY;
             state.collideZ = collideZ;
-            state.penetratedLastFrame = penetratedLastFrame;
-            state.stuckInCollider = stuckInCollider;
             state.gliding = gliding;
             state.sprinting = sprinting;
             state.jumping = jumping;
             state.riptideActive = riptideActive;
-            state.riptideGroundStepPending = riptideGroundStepPending;
+            state.stuckX = stuckX;
+            state.stuckY = stuckY;
+            state.stuckZ = stuckZ;
+            state.inWater = inWater;
+            state.swimAmount = swimAmount;
+            state.fallFlyTicks = fallFlyTicks;
+            state.recoveryFlags = recoveryFlags;
+            state.headInWater = headInWater;
         }
     }
 }

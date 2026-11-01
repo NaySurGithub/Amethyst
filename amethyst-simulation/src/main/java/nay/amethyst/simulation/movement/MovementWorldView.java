@@ -27,5 +27,15 @@ public interface MovementWorldView {
     /** Whether a solid entity intersects this exact area. */
     boolean hasSolidEntityIntersecting(FloatBox area);
 
+    /** lava_movement attribute; the player registers it at 0.02. */
+    default float lavaSpeed() {
+        return 0.02f;
+    }
+
+    /** How many mobs a riptide spin hits in this area; each one scales the velocity by -0.2. */
+    default int mobHitCount(FloatBox area) {
+        return hasSolidEntityIntersecting(area) ? 1 : 0;
+    }
+
     MovementBlockPosition supportingBlock(FloatBox area, FloatVector playerPosition);
 }

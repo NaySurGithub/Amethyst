@@ -17,11 +17,8 @@ import java.util.Map;
 public final class FrameWorldView implements MovementWorldView {
     private static final float SOLID_ENTITY_RANGE = 1.5f;
 
-    private static final float HORIZONTAL_INSET = 0.001f;
-    private static final float VERTICAL_INSET = 0.40099999f;
 
     private static final String POWDER_SNOW = "minecraft:powder_snow";
-    private static final float POWDER_SNOW_ABOVE_EPSILON = 1.0E-5f;
 
     private final WorldFrame frame;
     private final AuthoritativeMotionState state;
@@ -35,16 +32,30 @@ public final class FrameWorldView implements MovementWorldView {
         this.state = state;
     }
 
-    static boolean powderSnowSupports(AuthoritativeMotionState state, float top) {
-        return state.wearingLeatherBoots() && !state.pressingSneak()
-                && state.position().y() > top - POWDER_SNOW_ABOVE_EPSILON;
+    /**
+     * BDS powder snow support height: none below the top (2^-23 tolerance) or while descending
+     * through it, 0.9 after a fall longer than 2.5, else a full block for leather boots only.
+     */
+    static float powderSnowSupportHeight(AuthoritativeMotionState state, float blockTop) {
+        boolean fallThrough = state.sneaking() && state.wearingLeatherBoots();
+        if (state.position().y() < blockTop - 0.00000011920929f || fallThrough) return 0.0f;
+        if (!(state.fallDistance() <= 2.5f)) return 0.9f;
+        return state.wearingLeatherBoots() ? 1.0f : 0.0f;
+    }
+
+    /** The powder snow box this actor collides with, or null. */
+    private Aabb powderSnowBox(Aabb box) {
+        BlockFrame block = frame.blockAt((int) Math.floor(box.minX()), (int) Math.floor(box.minY()),
+                (int) Math.floor(box.minZ()));
+        if (block == null || !POWDER_SNOW.equals(block.id())) return box;
+        float bottom = (float) Math.floor(box.minY());
+        float height = powderSnowSupportHeight(state, bottom + 1.0f);
+        if (height <= 0.0f) return null;
+        return new Aabb(box.minX(), bottom, box.minZ(), box.maxX(), bottom + height, box.maxZ());
     }
 
     private boolean ignoredPowderSnow(Aabb box) {
-        BlockFrame block = frame.blockAt((int) Math.floor(box.minX()), (int) Math.floor(box.minY()),
-                (int) Math.floor(box.minZ()));
-        return block != null && POWDER_SNOW.equals(block.id())
-                && !powderSnowSupports(state, (float) box.maxY());
+        return powderSnowBox(box) == null;
     }
 
     @Override
@@ -53,9 +64,21 @@ public final class FrameWorldView implements MovementWorldView {
         if (block == null) {
             return MovementBlockView.AIR;
         }
-        return views.computeIfAbsent(block, source -> new MovementBlockView(source.id(),
-                (float) source.friction(), source.water() || source.lava(),
-                source.id().equals("minecraft:bamboo"), source.climbable()));
+        return views.computeIfAbsent(block, FrameWorldView::view);
+    }
+
+    private static MovementBlockView view(BlockFrame source) {
+        List<Aabb> boxes = source.collisions();
+        boolean fullCube = boxes.size() == 1 && boxes.get(0).maxX() - boxes.get(0).minX() >= 1.0
+                && boxes.get(0).maxY() - boxes.get(0).minY() >= 1.0
+                && boxes.get(0).maxZ() - boxes.get(0).minZ() >= 1.0;
+        boolean solidMotion = !boxes.isEmpty() && !source.water() && !source.lava()
+                && !source.climbable() && !source.id().contains("web");
+        return new MovementBlockView(source.id(), (float) source.friction(),
+                source.water() || source.lava(), source.id().equals("minecraft:bamboo"),
+                source.climbable(), source.lava() ? 2 : source.water() ? 1 : 0,
+                source.fluidDepth(), source.scaffoldingStability(), source.bubbleDirection(),
+                solidMotion, fullCube, boxes.isEmpty());
     }
 
     @Override
@@ -64,14 +87,17 @@ public final class FrameWorldView implements MovementWorldView {
         List<Aabb> boxes = frame.collisionBoxes(query);
         List<FloatBox> converted = new ArrayList<>(boxes.size());
         for (Aabb box : boxes) {
-            if (ignoredPowderSnow(box)) {
+            Aabb kept = powderSnowBox(box);
+            if (kept == null) {
                 continue;
             }
-            converted.add(toFloatBox(box));
+            converted.add(toFloatBox(kept));
         }
 
+        // whole entity boxes after every block shape, kept when they overlap the query grown by 0.25
+        Aabb grown = toAabb(area.grow(0.25f, 0.25f, 0.25f));
         for (Aabb box : frame.solidEntityBoxes()) {
-            if (box.intersects(query)) {
+            if (box.intersects(grown)) {
                 converted.add(toFloatBox(box));
             }
         }
@@ -91,6 +117,22 @@ public final class FrameWorldView implements MovementWorldView {
             }
         }
         return false;
+    }
+
+    @Override
+    public float lavaSpeed() {
+        float speed = (float) frame.physics().lavaMovementSpeed();
+        return speed > 0.0f ? speed : 0.02f;
+    }
+
+    @Override
+    public int mobHitCount(FloatBox area) {
+        Aabb probe = toAabb(area);
+        int hits = 0;
+        for (Aabb box : frame.solidEntityBoxes()) {
+            if (box.intersects(probe)) hits++;
+        }
+        return hits;
     }
 
     @Override
@@ -117,57 +159,56 @@ public final class FrameWorldView implements MovementWorldView {
     }
 
     private FluidState computeFluidState(FloatBox area) {
-        boolean water = false;
-        boolean lava = false;
+        // BDS liquid query bounds: water contracted by 0.001 / 0.401, lava by 0.1 / 0.4
+        float[] water = contract(area, 0.001f, 0.401f);
+        float[] lava = contract(area, 0.1f, 0.4f);
+        boolean inWater = false;
+        boolean inLava = false;
         float submersion = 0.0f;
-        float flowX = 0.0f;
-        float flowY = 0.0f;
-        float flowZ = 0.0f;
-        int bubbleDirection = 0;
-        boolean bubbleSurface = false;
-
-        float minX = area.minX() + HORIZONTAL_INSET;
-        float maxX = area.maxX() - HORIZONTAL_INSET;
-        float minZ = area.minZ() + HORIZONTAL_INSET;
-        float maxZ = area.maxZ() - HORIZONTAL_INSET;
-        float minY = area.minY() + VERTICAL_INSET;
-        float maxY = area.maxY() - VERTICAL_INSET;
-        if (minY > maxY) {
-            minY = (area.minY() + area.maxY()) * 0.5f;
-            maxY = minY;
-        }
-
         for (BlockPos position : frame.index().fluids()) {
             BlockFrame block = frame.blocks().get(position);
             if (block == null) {
                 continue;
             }
-
-            if (position.x() < floor(minX) || position.x() > floor(maxX)
-                    || position.y() < floor(minY) || position.y() > floor(maxY)
-                    || position.z() < floor(minZ) || position.z() > floor(maxZ)) {
-                continue;
-            }
-            float top = position.y() + (float) block.fluidHeight();
-
-            water |= block.water();
-            lava |= block.lava();
-            submersion = Math.max(submersion, top - area.minY());
-            flowX += (float) block.flow().x;
-            flowY += (float) block.flow().y;
-            flowZ += (float) block.flow().z;
-
-            if (block.bubbleDirection() != 0 && bubbleDirection == 0) {
-                bubbleDirection = block.bubbleDirection();
-                bubbleSurface = frame.blockAt(position.x(), position.y() + 1, position.z()) == null;
-            }
+            boolean waterHit = block.water() && !block.lava() && touches(water, position);
+            boolean lavaHit = block.lava() && touches(lava, position);
+            if (!waterHit && !lavaHit) continue;
+            inWater |= waterHit;
+            inLava |= lavaHit;
+            submersion = Math.max(submersion, position.y() + (float) block.fluidHeight() - area.minY());
         }
-
-        if (!water && !lava) {
+        if (!inWater && !inLava) {
             return FluidState.NONE;
         }
-        return new FluidState(water, lava, submersion, new FloatVector(flowX, flowY, flowZ),
-                bubbleDirection, bubbleSurface);
+        return new FluidState(inWater, inLava, submersion);
+    }
+
+    private static float[] contract(FloatBox box, float horizontal, float vertical) {
+        float[] source = {box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ()};
+        float[] out = new float[6];
+        for (int axis = 0; axis < 3; axis++) {
+            float amount = axis == 1 ? vertical : horizontal;
+            out[axis] = source[axis] + amount;
+            out[axis + 3] = source[axis + 3] - amount;
+            if (out[axis] > out[axis + 3]) {
+                float middle = (source[axis] + source[axis + 3]) * 0.5f;
+                out[axis] = middle;
+                out[axis + 3] = middle;
+            }
+        }
+        return out;
+    }
+
+    /** CollectLiquidCells: cells floor(min) .. floor(max + 1) - 1 whose corner lies within the bounds. */
+    private static boolean touches(float[] bounds, BlockPos position) {
+        int[] cell = {position.x(), position.y(), position.z()};
+        for (int axis = 0; axis < 3; axis++) {
+            int begin = floor(bounds[axis]);
+            int end = floor(bounds[axis + 3] + 1.0f);
+            if (cell[axis] < begin || cell[axis] >= end) return false;
+            if (!((float) cell[axis] <= bounds[axis + 3])) return false;
+        }
+        return true;
     }
 
     @Override

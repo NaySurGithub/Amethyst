@@ -1,5 +1,11 @@
 package nay.amethyst.simulation.movement;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+
 public final class MovementConstants {
     public static final float AIR_FRICTION = 0.91f;
     public static final float NORMAL_GRAVITY = 0.08f;
@@ -18,89 +24,85 @@ public final class MovementConstants {
     public static final int JUMP_DELAY_TICKS = 10;
     public static final int GLIDE_BOOST_TICKS = 20;
 
-    private static final float[] SINE = new float[65_536];
-    private static final float PI = 3.1415927f;
-    private static final float[] SIN_COEFFICIENTS = {
-            1.5896230e-10f,
-            -2.5050748e-8f,
-            2.7557314e-6f,
-            -1.9841270e-4f,
-            8.333334e-3f,
-            -1.6666667e-1f
-    };
-    private static final float[] COS_COEFFICIENTS = {
-            -1.1358537e-11f,
-            2.0875701e-9f,
-            -2.7557314e-7f,
-            2.4801588e-5f,
-            -1.3888889e-3f,
-            4.1666668e-2f
-    };
+    /** FLT_EPSILON, the BDS collision and damping threshold. */
+    public static final float FLT_EPSILON = 1.1920929e-7f;
+    /** BDS relative movement constant 0x3c8efa35. */
+    public static final float DEGREES_TO_RADIANS = Float.intBitsToFloat(0x3c8efa35);
+    /** Player sprint air speed, 0x3cd4fdf3, one ulp under 0.026f. */
+    public static final float SPRINT_AIR_SPEED = Float.intBitsToFloat(0x3cd4fdf3);
+    public static final float AIR_SPEED = 0.02f;
+    /** Minimum fall speed for slime/bed restitution, 0x3da3d71a. */
+    public static final float MINIMUM_BOUNCE_SPEED = Float.intBitsToFloat(0x3da3d71a);
 
-    static {
-        for (int index = 0; index < SINE.length; index++) {
-            float angle = ((float) index * PI * 2.0f) / 65_536.0f;
-            SINE[index] = floatSin(angle);
-        }
-    }
+    /**
+     * Current BDS 1.26.52 sine table, as read from a running BDS 1.26.52 process
+     * (bedrock_sine_1_26_52.bin, little-endian binary32).
+     */
+    private static final float[] SINE = loadSineTable();
 
     private MovementConstants() {
     }
 
-    public static float sin(float value) {
-        return SINE[(int) (value * 10_430.378f) & 65_535];
+    private static float[] loadSineTable() {
+        try (InputStream in = MovementConstants.class.getResourceAsStream("bedrock_sine_1_26_52.bin")) {
+            if (in == null) throw new IllegalStateException("missing bedrock_sine_1_26_52.bin");
+            byte[] bytes = in.readAllBytes();
+            if (bytes.length != 65_536 * 4) throw new IllegalStateException("bad sine table size");
+            ByteBuffer buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+            float[] table = new float[65_536];
+            for (int i = 0; i < table.length; i++) table[i] = buffer.getFloat();
+            return table;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
+    /** Sine table index: out of int32 range gives 0. */
+    public static int sineIndex(float coordinate) {
+        if (!(coordinate >= -2147483648.0f && coordinate < 2147483648.0f)) return 0;
+        return ((int) coordinate) & 0xFFFF;
+    }
+
+    /** Table entry at an already scaled coordinate. */
+    public static float sineEntry(float coordinate) {
+        return SINE[sineIndex(coordinate)];
+    }
+
+    /** Table sine of a radian angle: index = (int)(rad * 10430.378f). */
+    public static float sin(float value) {
+        return SINE[sineIndex(value * 10_430.378f)];
+    }
+
+    /** Table cosine: index = (int)(Round(rad * 10430.378f) + 16384f). */
     public static float cos(float value) {
-        return SINE[(int) (value * 10_430.378f + 16_384.0f) & 65_535];
+        return SINE[sineIndex(value * 10_430.378f + 16_384.0f)];
+    }
+
+    /**
+     * CRT binary32 sinf as used by current BDS relative movement.
+     * Evaluated in double and rounded once to float, as glibc/Apple/UCRT sinf do.
+     */
+    public static float crtSin(float value) {
+        return (float) StrictMath.sin(value);
+    }
+
+    public static float crtCos(float value) {
+        return (float) StrictMath.cos(value);
+    }
+
+    /** BDS friction damping. */
+    public static float damp(float velocity, float retention) {
+        return velocity * (Math.abs(velocity) > FLT_EPSILON ? retention : 0.0f);
+    }
+
+    /** BDS ground acceleration. */
+    public static float groundAcceleration(float speed, float friction) {
+        float drag = friction * 0.91f;
+        float ratio = 0.54600006f / (drag == 0.0f ? 0.54600006f : drag);
+        return ((ratio * ratio) * ratio) * speed;
     }
 
     public static float clamp(float value, float minimum, float maximum) {
         return Math.max(minimum, Math.min(maximum, value));
-    }
-
-    private static float floatSin(float value) {
-        if (value == 0.0f || Float.isNaN(value)) {
-            return value;
-        }
-        if (Float.isInfinite(value)) {
-            return Float.NaN;
-        }
-
-        boolean negative = false;
-        if (value < 0.0f) {
-            value = -value;
-            negative = true;
-        }
-
-        long octant = (long) (value * (4.0f / PI));
-        float octantValue = (float) octant;
-        if ((octant & 1L) == 1L) {
-            octant++;
-            octantValue++;
-        }
-        octant &= 7L;
-        float reduced = ((value - octantValue * 0.7853981f)
-                - octantValue * 3.7748947e-8f)
-                - octantValue * 2.6951514e-15f;
-        if (octant > 3L) {
-            negative = !negative;
-            octant -= 4L;
-        }
-
-        float squared = reduced * reduced;
-        float result;
-        if (octant == 1L || octant == 2L) {
-            result = 1.0f - 0.5f * squared + squared * squared
-                    * (((((COS_COEFFICIENTS[0] * squared + COS_COEFFICIENTS[1])
-                    * squared + COS_COEFFICIENTS[2]) * squared + COS_COEFFICIENTS[3])
-                    * squared + COS_COEFFICIENTS[4]) * squared + COS_COEFFICIENTS[5]);
-        } else {
-            result = reduced + reduced * squared
-                    * (((((SIN_COEFFICIENTS[0] * squared + SIN_COEFFICIENTS[1])
-                    * squared + SIN_COEFFICIENTS[2]) * squared + SIN_COEFFICIENTS[3])
-                    * squared + SIN_COEFFICIENTS[4]) * squared + SIN_COEFFICIENTS[5]);
-        }
-        return negative ? -result : result;
     }
 }

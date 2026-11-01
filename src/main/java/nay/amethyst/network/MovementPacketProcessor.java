@@ -314,6 +314,12 @@ public final class MovementPacketProcessor {
         Item boots = player.getInventory().getBoots();
         data.motion.depthStrider(boots == null || boots.isNull()
                 ? 0 : boots.getEnchantmentLevel(Enchantment.ID_WATER_WALKER));
+        data.motion.soulSpeed(boots != null && !boots.isNull()
+                && boots.getEnchantmentLevel(Enchantment.ID_SOUL_SPEED) > 0);
+        Item leggings = player.getInventory().getLeggings();
+        data.motion.swiftSneakLevel(leggings == null || leggings.isNull()
+                ? 0 : leggings.getEnchantmentLevel(Enchantment.ID_SWIFT_SNEAK));
+        data.motion.weaving(player.hasEffect(EffectType.WEAVING));
         GameType gameType = data.clientPlayer.gameType();
         data.motion.supportedGameMode(gameType == GameType.SURVIVAL
                 || gameType == GameType.ADVENTURE);
@@ -855,7 +861,6 @@ public final class MovementPacketProcessor {
 
         Vector3 best = null;
         boolean bestIsRiptide = false;
-        boolean riptideGroundStep = false;
         double bestDistance = BURST_MATCH_DISTANCE;
 
         List<Vector3> candidates = new ArrayList<>(data.windChargeCandidates());
@@ -884,33 +889,20 @@ public final class MovementPacketProcessor {
             }
         }
 
-        boolean groundStep = data.riptideGroundStep();
         for (Vector3 candidate : riptide) {
-            Vector3 movement = groundStep ? candidate.add(0.0, 1.0, 0.0) : candidate;
-            double distance = movement.distance(observedMovement);
+            double distance = candidate.distance(observedMovement);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 best = candidate;
                 bestIsRiptide = true;
-                riptideGroundStep = groundStep;
-            }
-            double clippedStepDistance = candidate.distance(observedMovement);
-            if (clippedStepDistance < bestDistance) {
-                bestDistance = clippedStepDistance;
-                best = candidate;
-                bestIsRiptide = true;
-                riptideGroundStep = false;
             }
             if (pending == null) continue;
             Vector3 combinedVelocity = candidate.add(pending);
-            Vector3 combinedMovement = groundStep
-                    ? combinedVelocity.add(0.0, 1.0, 0.0) : combinedVelocity;
-            double combinedDistance = combinedMovement.distance(observedMovement);
+            double combinedDistance = combinedVelocity.distance(observedMovement);
             if (combinedDistance < bestDistance) {
                 bestDistance = combinedDistance;
                 best = combinedVelocity;
                 bestIsRiptide = true;
-                riptideGroundStep = groundStep;
             }
         }
 
@@ -921,7 +913,7 @@ public final class MovementPacketProcessor {
         data.motion.knockback(new FloatVector((float) best.x, (float) best.y,
                 (float) best.z));
         if (bestIsRiptide) {
-            data.motion.startRiptide(riptideGroundStep);
+            data.motion.startRiptide();
             data.clearRiptideCandidates();
         }
         data.clearWindChargeCandidates();

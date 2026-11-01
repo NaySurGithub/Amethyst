@@ -28,23 +28,55 @@ public final class MovementSimulator {
             return finishRiptideTick(state, result(state, false));
         }
         state.descendingScaffold(false);
-        if (state.velocity().lengthSquared() < 1.0E-12f) {
-            state.velocity(FloatVector.ZERO);
-        }
 
-        applyRiptideGroundStep(state, world, correctionThreshold);
-        SimulationResult result = engineFor(state, world, correctionThreshold).run();
-        return finishRiptideTick(state, result);
+        state.headInWater(headInWater(state, world));
+        state.nearFluid(world.hasLiquidIntersection(state.boundingBox().grow(1.0f, 1.0f, 1.0f)));
+
+        // glide input: +0.1 lift while gliding with jump held in creative, after 11 glide ticks
+        boolean glideLift = state.gliding() && state.pressingJump() && state.instabuild()
+                && state.fallFlyTicks() >= 11;
+        state.fallFlyTicks(state.gliding() ? state.fallFlyTicks() + 1 : 0);
+        if (glideLift) {
+            FloatVector v = state.velocity();
+            state.velocity(new FloatVector(v.x() + 0.0f, v.y() + 0.1f, v.z() + 0.0f));
+        }
+        // fluid current, before the travel of any medium
+        FluidCurrent.apply(state, world, state.boundingBox());
+
+        PredictionEngine engine = engineFor(state, world, correctionThreshold);
+        SimulationResult result = engine.run();
+        state.inWater(engine instanceof WaterPredictionEngine);
+        return result;
+    }
+
+    /**
+     * Eye cell water test: liquid height (y + 1) - (depth / 9 - 1 / 9) of that cell alone, against
+     * the eye height of the pose (0.4 horizontal, 1.27001 sneaking, 1.62001 standing).
+     */
+    static boolean headInWater(AuthoritativeMotionState state, MovementWorldView world) {
+        float eye = state.swimming() || state.gliding() ? 0.4f
+                : state.sneaking() ? 1.62001f - 0.35f : 1.62001f;
+        FloatVector position = state.position();
+        float eyeY = position.y() + eye;
+        int y = (int) Math.floor(eyeY);
+        MovementBlockView cell = world.block((int) Math.floor(position.x()), y,
+                (int) Math.floor(position.z()));
+        if (cell.fluid() != 1) return false;
+        int depth = cell.fluidDepth() < 8 ? cell.fluidDepth() + 1 : 1;
+        float drop = (float) depth / 9.0f + Float.intBitsToFloat(0xbde38e39);
+        float height = (float) (y + 1) - drop;
+        return height > eyeY;
     }
 
     private PredictionEngine engineFor(AuthoritativeMotionState state, MovementWorldView world,
                                        float correctionThreshold) {
         FluidState fluid = world.fluidState(state.boundingBox());
-        if (fluid.water()) {
-            return new WaterPredictionEngine(state, world, collisions, correctionThreshold, fluid);
-        }
+        // the fluid material picks lava before water
         if (fluid.lava()) {
             return new LavaPredictionEngine(state, world, collisions, correctionThreshold, fluid);
+        }
+        if (fluid.water()) {
+            return new WaterPredictionEngine(state, world, collisions, correctionThreshold, fluid);
         }
         if (state.gliding()) {
             if (state.wearingElytra() && !state.onGround()) {
@@ -70,17 +102,6 @@ public final class MovementSimulator {
         }
         return !state.flying() && !state.justDisabledFlight() && !state.noClip()
                 && state.alive() && state.supportedGameMode();
-    }
-
-    private void applyRiptideGroundStep(AuthoritativeMotionState state, MovementWorldView world,
-                                         float correctionThreshold) {
-        if (!state.riptideGroundStepPending()) return;
-        FloatVector velocity = state.hasKnockback() ? state.knockback() : state.velocity();
-        state.velocity(velocity);
-        state.velocity(new FloatVector(0.0f, 1.0f, 0.0f));
-        collisions.move(state, world, correctionThreshold);
-        state.velocity(velocity);
-        state.consumeRiptideGroundStep();
     }
 
     private static boolean attemptTeleport(AuthoritativeMotionState state,
@@ -112,20 +133,15 @@ public final class MovementSimulator {
         }
         FloatVector velocity = state.velocity();
         float x = velocity.x();
-        FloatBox box = state.boundingBox();
-        int xBlock = (int) Math.floor(state.position().x());
-        int zBlock = (int) Math.floor(state.position().z());
-        int feetY = (int) Math.floor(box.minY());
-        boolean prevented = world.block(xBlock, feetY, zBlock).preventsJumping()
-                || world.block(xBlock, feetY - 1, zBlock).preventsJumping();
-        float multiplier = prevented ? MovementConstants.PREVENTED_JUMP_MULTIPLIER : 1.0f;
-        float y = state.jumpHeight() * multiplier;
+        float multiplier = PredictionEngine.jumpPreventionMultiplier(state, world);
+        float height = state.jumpHeight() * multiplier;
+        float y = height > velocity.y() ? height : velocity.y();
         float z = velocity.z();
         state.jumpDelay(MovementConstants.JUMP_DELAY_TICKS);
         if (state.sprinting()) {
-            float direction = state.rotation().z() * 0.017453292f;
-            x -= MovementConstants.sin(direction) * 0.2f;
-            z += MovementConstants.cos(direction) * 0.2f;
+            float coordinate = (state.rotation().z() * 0.017453292f) * 10_430.378f;
+            x = x - MovementConstants.sineEntry(coordinate) * 0.2f;
+            z = z + MovementConstants.sineEntry(coordinate + 16_384.0f) * 0.2f;
         }
         state.velocity(new FloatVector(x, y, z));
     }
