@@ -3,6 +3,7 @@ package nay.amethyst.network;
 import nay.amethyst.AmethystPlugin;
 import nay.amethyst.check.BacktrackStats;
 import nay.amethyst.check.CheckType;
+import nay.amethyst.check.HitboxStats;
 import nay.amethyst.player.PlayerData;
 import nay.amethyst.prediction.CombatPredictionResult;
 import nay.amethyst.prediction.CombatPredictor;
@@ -12,6 +13,7 @@ import org.cloudburstmc.protocol.bedrock.packet.InventoryTransactionPacket;
 import org.powernukkitx.Player;
 import org.powernukkitx.entity.Entity;
 import org.powernukkitx.event.server.PacketReceiveEvent;
+import org.powernukkitx.math.Vector3;
 
 import java.util.Map;
 import java.util.UUID;
@@ -63,6 +65,7 @@ public final class CombatPacketProcessor {
         if (player.isCreative() || player.isSpectator()) {
             return;
         }
+        inspectReportedHit(event, player, data, target, transaction, clientEntity);
 
         var settings = plugin.settings();
         double expansion = Math.max(0, settings.combatBboxExpansion());
@@ -89,6 +92,35 @@ public final class CombatPacketProcessor {
         } else if (target instanceof Player) {
             inspectBacktrack(event, player, data, target, expansion, leniency, steps, maximumAngle,
                     closeRange, closeAngle);
+        }
+    }
+
+    /** Measures the hit point and the origin the attack reports; flags only once a tolerance is set. */
+    private void inspectReportedHit(PacketReceiveEvent event, Player player, PlayerData data, Entity target,
+                                    ItemUseOnActorInventoryTransaction transaction,
+                                    nay.amethyst.world.ClientEntityView clientEntity) {
+        var settings = plugin.settings();
+        if (clientEntity == null || settings.disabledCheck(CheckType.HITBOX_B.id())) return;
+        var hit = transaction.getHitPosition();
+        var from = transaction.getFromPosition();
+        if (!MovementCheckSupport.finite(hit) || !MovementCheckSupport.finite(from)) return;
+        double click = predictor.clickDeviation(clientEntity,
+                new Vector3(hit.getX(), hit.getY(), hit.getZ()),
+                Math.max(1, settings.combatInterpolationSteps()));
+        double origin = predictor.originDeviation(data, new Vector3(from.getX(), from.getY(), from.getZ()));
+        data.hitbox.add(click, origin);
+        if (settings.hitboxLogSamples()) {
+            plugin.getLogger().info("[Amethyst] hitbox sample " + player.getName() + " -> " + target.getName()
+                    + " click=" + String.format("%.4f", click) + " origin=" + String.format("%.4f", origin)
+                    + " rtt=" + data.network.stackLatencyMillis() + "ms | " + data.hitbox.describe());
+        }
+        boolean clickFailed = settings.hitboxClickTolerance() > 0 && click > settings.hitboxClickTolerance()
+                && click < HitboxStats.UNRELATED;
+        boolean originFailed = settings.hitboxOriginTolerance() > 0 && origin > settings.hitboxOriginTolerance();
+        if (clickFailed || originFailed) {
+            violations.fail(event, player, data, CheckType.HITBOX_B, 1,
+                    "click=" + String.format("%.4f", click) + " origin=" + String.format("%.4f", origin),
+                    false, false);
         }
     }
 

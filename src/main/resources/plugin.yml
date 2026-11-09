@@ -7,7 +7,7 @@ description: Server-authoritative anti-cheat for PowerNukkitX.
 commands:
   amethyst:
     description: Manage Amethyst.
-    usage: "/amethyst <status|reload|alerts|backtrack <player>>"
+    usage: "/amethyst <status|reload|alerts|backtrack <player>|hitbox <player>>"
     permission: amethyst.alerts
 permissions:
   amethyst.alerts:

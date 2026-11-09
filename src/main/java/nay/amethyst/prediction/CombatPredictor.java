@@ -28,6 +28,42 @@ public final class CombatPredictor {
     public record Rewind(boolean receding, boolean rewound, double delayTicks, double gain) {
     }
 
+    /**
+     * How far the hit point an attack reports lies outside the target's hitbox, at the nearest of
+     * the positions the client can be showing: between its last two confirmed ones, or on the way
+     * to the last one sent. The box is the bare one, so the figure is the margin the client used.
+     */
+    public double clickDeviation(ClientEntityView entity, Vector3 click, int lerpSteps) {
+        double half = entity.width() * entity.scale() / 2.0;
+        double height = entity.height() * entity.scale();
+        double nearest = Double.MAX_VALUE;
+        Vector3[][] spans = {{entity.previousPosition(), entity.position()},
+                {entity.position(), entity.sentPosition()}};
+        for (Vector3[] span : spans) {
+            if (span[0] == null || span[1] == null) continue;
+            for (int step = 0; step <= lerpSteps; step++) {
+                Vector3 position = lerp(span[0], span[1], step / (double) lerpSteps);
+                Aabb box = new Aabb(position.x - half, position.y, position.z - half,
+                        position.x + half, position.y + height, position.z + half);
+                nearest = Math.min(nearest, box.distanceTo(click.x, click.y, click.z));
+            }
+        }
+        return nearest;
+    }
+
+    /** How far the origin an attack reports lies from the attacker's path over its last tick. */
+    public double originDeviation(PlayerData data, Vector3 origin) {
+        List<WorldFrame> frames = data.history.recent(2);
+        if (frames.isEmpty()) return 0.0;
+        Vector3 end = frames.get(0).position();
+        Vector3 start = frames.size() < 2 ? end : frames.get(1).position();
+        Vector3 path = end.subtract(start);
+        double length = path.lengthSquared();
+        double along = length < 1.0E-12 ? 0.0
+                : clamp(origin.subtract(start).dot(path) / length, 0.0, 1.0);
+        return origin.distance(lerp(start, end, along));
+    }
+
     /** Null when the target was not tracked over the last ticks. */
     public Rewind rewind(PlayerData data, long targetId, double boxExpansion, double reachLeniency,
                          int lerpSteps, double maximumAttackAngle, double closeRangeFallback,

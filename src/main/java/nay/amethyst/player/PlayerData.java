@@ -75,6 +75,7 @@ public final class PlayerData {
     /** amethyst.bypass, refreshed once a tick: asking the permission on every packet adds up. */
     public volatile boolean bypass;
     public final nay.amethyst.check.BacktrackStats backtrack = new nay.amethyst.check.BacktrackStats();
+    public final nay.amethyst.check.HitboxStats hitbox = new nay.amethyst.check.HitboxStats();
     /** Entity last attacked: its movement is confirmed packet by packet, never batched. */
     public volatile long combatTargetId = -1;
     public volatile long combatTargetNanos;

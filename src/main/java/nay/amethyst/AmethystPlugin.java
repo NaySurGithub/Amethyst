@@ -168,11 +168,14 @@ public final class AmethystPlugin extends PluginBase {
             sender.sendMessage("Amethyst configuration reloaded.");
             return true;
         }
-        if (args[0].equalsIgnoreCase("backtrack")) {
+        if (args[0].equalsIgnoreCase("backtrack") || args[0].equalsIgnoreCase("hitbox")) {
+            boolean backtrack = args[0].equalsIgnoreCase("backtrack");
             Player target = args.length < 2 ? null : getServer().getPlayer(args[1]);
             PlayerData data = getPlayerData(target);
-            sender.sendMessage(data == null ? "Usage: /amethyst backtrack <online player>"
-                    : "Backtrack " + target.getName() + " | " + data.backtrack.describe());
+            sender.sendMessage(data == null
+                    ? "Usage: /amethyst " + (backtrack ? "backtrack" : "hitbox") + " <online player>"
+                    : (backtrack ? "Backtrack " : "Hitbox ") + target.getName() + " | "
+                            + (backtrack ? data.backtrack.describe() : data.hitbox.describe()));
             return true;
         }
         if (args[0].equalsIgnoreCase("alerts")) {

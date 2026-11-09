@@ -42,6 +42,14 @@ timer:
   # How far (ms) the client's clock may run ahead of real time. The clock is re-anchored on every
   # latency acknowledgment, so late or bunched packets from a poor connection never add up here.
   tolerance-ms: 100
+hitbox:
+  # Hitbox-B reads the hit point every attack reports and measures how far it lies outside the
+  # target's confirmed hitbox. Blocks it may lie outside before flagging; 0 only gathers data.
+  click-tolerance: 0
+  # Same for the origin the attack reports, against the attacker's own inputs. 0 only gathers data.
+  origin-tolerance: 0
+  # Prints both figures for every attack to the console. Use it to pick the two values above.
+  log-samples: false
 backtrack:
   # Hits on a target moving away that are kept, most recent first.
   window: 40

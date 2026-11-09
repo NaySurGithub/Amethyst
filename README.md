@@ -77,6 +77,7 @@ Drop the jar into `plugins/` and restart. There are no dependencies.
 | --- | --- |
 | `Reach-A` | Attacks beyond reach, measured against the rewound hitbox. |
 | `Hitbox-A` | Attacks whose sight ray never touches the target. |
+| `Hitbox-B` | A reported hit point outside the target hitbox, or a reported origin off the attacker's path. Gathers data until a tolerance is set. |
 | `KillAura-A` | Invalid attack targets or sequences. |
 | `Autoclicker-A` | Clicks per second above the configured ceiling. |
 | `AutoTotem-A` | Totem swapped into the offhand within milliseconds of the last one popping. |
@@ -148,6 +149,9 @@ creative and spectator players are exempt.
 | `combat.close-range-angle` | `60.0` | Angle allowed by that fallback. |
 | `combat.cps-limit` | `24` | Clicks per second from keyboard, mouse or controller. |
 | `combat.touch-cps-limit` | `24` | Clicks per second from touch input. |
+| `hitbox.click-tolerance` | `0` | Blocks a reported hit point may lie outside the target hitbox. `0` only gathers data. |
+| `hitbox.origin-tolerance` | `0` | Blocks a reported origin may lie from the attacker's path. `0` only gathers data. |
+| `hitbox.log-samples` | `false` | Prints both figures for every attack to the console. |
 | `backtrack.window` | `40` | Hits on a target moving away that `Backtrack-B` keeps. |
 | `backtrack.minimum-samples` | `20` | Hits needed in the window before it is judged. |
 | `backtrack.ratio` | `0.25` | Share of those hits that only land on an older position than the confirmed one. |
@@ -173,6 +177,7 @@ If you need to tune anything, start with `prediction.tolerance` and `prediction.
 | `/amethyst status` | Tracked players and alert state. |
 | `/amethyst reload` | Reloads `config.yml`. |
 | `/amethyst alerts` | Toggles alerts until the next reload. |
+| `/amethyst hitbox <player>` | Shows what `Hitbox-B` measured on a player's attacks since they joined. |
 | `/amethyst backtrack <player>` | Shows what `Backtrack-B` gathered on a player since they joined. |
 
 | Permission | Default | Description |

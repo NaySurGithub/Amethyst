@@ -28,6 +28,7 @@ public enum CheckType {
     KILL_AURA_A("KillAura-A", "Invalid attack target or attack sequence.", true),
     REACH_A("Reach-A", "The target was attacked beyond the allowed reach.", true),
     HITBOX_A("Hitbox-A", "The sight ray did not intersect the target hitbox.", true),
+    HITBOX_B("Hitbox-B", "The hit point or the origin an attack reports does not match what was confirmed.", true),
     BREAK_REACH("BreakReach-A", "A block was broken beyond the allowed reach."),
     PLACE_REACH_A("PlaceReach-A", "A block was placed beyond the allowed reach."),
     FAST_BREAK_A("FastBreak-A", "A block was destroyed before its calculated break time."),
