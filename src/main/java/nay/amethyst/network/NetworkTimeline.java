@@ -1,5 +1,6 @@
 package nay.amethyst.network;
 
+import java.util.ArrayDeque;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -29,6 +30,68 @@ public final class NetworkTimeline {
      */
     private long timerClockNanos;
     private long timerAheadNanos;
+    private static final int MAX_STAMPS = 512;
+    private static final long DEFERRED_TIMEOUT_NANOS = 250_000_000L;
+    /**
+     * Answered probes are read on the network thread, every other packet on the server thread a
+     * little later. Each packet is numbered as it arrives, and an answered probe remembers how many
+     * came before it, so its callbacks run between the same two packets the client sent it between.
+     */
+    private final ArrayDeque<Stamp> stamps = new ArrayDeque<>();
+    private final ArrayDeque<Deferred> deferred = new ArrayDeque<>();
+    private long arrivedPackets;
+    private long handledPackets;
+
+    private record Stamp(Object packet, long sequence) {
+    }
+
+    private record Deferred(long afterPackets, long arrivedNanos, List<Runnable> callbacks) {
+    }
+
+    /** Network thread: a packet on its way to the server thread. */
+    public synchronized void stampInbound(Object packet) {
+        stamps.addLast(new Stamp(packet, ++arrivedPackets));
+        if (stamps.size() > MAX_STAMPS) stamps.removeFirst();
+    }
+
+    /** Network thread: the callbacks of an answered probe wait for the packets that arrived before it. */
+    public synchronized void deferAcknowledged(List<Runnable> callbacks, long now) {
+        if (callbacks.isEmpty()) return;
+        deferred.addLast(new Deferred(arrivedPackets, now, callbacks));
+    }
+
+    /** Server thread, before a packet is handled: the probes answered before it arrived. */
+    public synchronized List<Runnable> beginInbound(Object packet) {
+        long sequence = -1;
+        for (Stamp stamp : stamps) {
+            if (stamp.packet() == packet) {
+                sequence = stamp.sequence();
+                break;
+            }
+        }
+        if (sequence < 0) return due(handledPackets, Long.MIN_VALUE);
+        while (!stamps.isEmpty() && stamps.peekFirst().sequence() <= sequence) stamps.removeFirst();
+        List<Runnable> callbacks = due(sequence - 1, Long.MIN_VALUE);
+        handledPackets = Math.max(handledPackets, sequence);
+        return callbacks;
+    }
+
+    /** Server thread, once a tick: what no later packet claimed, and anything left waiting too long. */
+    public synchronized List<Runnable> dueAcknowledgments(long now) {
+        return due(handledPackets, now - DEFERRED_TIMEOUT_NANOS);
+    }
+
+    private List<Runnable> due(long handled, long arrivedBefore) {
+        List<Runnable> callbacks = null;
+        while (!deferred.isEmpty()) {
+            Deferred next = deferred.peekFirst();
+            if (next.afterPackets() > handled && next.arrivedNanos() > arrivedBefore) break;
+            deferred.removeFirst();
+            if (callbacks == null) callbacks = new ArrayList<>(next.callbacks());
+            else callbacks.addAll(next.callbacks());
+        }
+        return callbacks == null ? List.of() : callbacks;
+    }
 
     public synchronized void tick(long now) {
         long elapsedTicks = lastServerTickNanos == 0 ? 1
@@ -181,6 +244,10 @@ public final class NetworkTimeline {
         stackLatencyNanos = 0;
         timerClockNanos = 0;
         timerAheadNanos = 0;
+        stamps.clear();
+        deferred.clear();
+        arrivedPackets = 0;
+        handledPackets = 0;
         allowedInputs = 65535;
         receivedFirstInput = false;
         currentAcknowledgments.clear();

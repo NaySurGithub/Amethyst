@@ -50,7 +50,13 @@ public final class MovementSessionRegistry {
                     current,
                     validator,
                     result -> plugin.getServer().getScheduler().scheduleTask(plugin,
-                            () -> rejectionHandler.accept(player, result))
+                            () -> rejectionHandler.accept(player, result)),
+                    packet -> {
+                        NetworkTimeline timeline = timelineProvider.apply(player);
+                        if (timeline != null) {
+                            timeline.stampInbound(packet);
+                        }
+                    }
             );
             interceptors.put(player.getUniqueId(), interceptor);
             session.setPacketHandler(interceptor);

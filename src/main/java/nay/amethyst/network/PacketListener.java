@@ -159,6 +159,7 @@ public final class PacketListener implements Listener {
             if (!data.joined) continue;
             data.network.tick(now);
             // an unanswered probe is applied after the cutoff: withholding it cannot hold state back
+            runAcknowledgments(data.network.dueAcknowledgments(now));
             runAcknowledgments(data.network.expireDelayedAcks());
             data.decayViolations(now, plugin.settings().violationDecaySeconds() * 1_000_000_000L);
             if (player.getRiding() != null) {
@@ -369,9 +370,13 @@ public final class PacketListener implements Listener {
         PlayerData playerData = players.get(player.getUniqueId());
         if (playerData == null || !playerData.joined || playerData.bypass) return;
         if (event.getPacket() instanceof NetworkStackLatencyPacket packet) {
-            runAcknowledgments(playerData.network.acknowledge(packet.getCreationTime(), System.nanoTime()));
+            long now = System.nanoTime();
+            playerData.network.deferAcknowledged(
+                    playerData.network.acknowledge(packet.getCreationTime(), now), now);
             return;
         }
+        // probes answered before this packet take effect before it, not at the next scheduler pass
+        runAcknowledgments(playerData.network.beginInbound(event.getPacket()));
         BadPacketCheck.Result badPacket = badPacketCheck.inspect(player, playerData, event.getPacket());
         if (badPacket != null && !plugin.settings().disabledCheck(badPacket.check().id())) {
             if (event.getPacket() instanceof PlayerAuthInputPacket) {
