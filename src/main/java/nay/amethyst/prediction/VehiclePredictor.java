@@ -37,10 +37,7 @@ public final class VehiclePredictor {
         Vector3 requested = target.add(-start.x, -start.y, -start.z);
         Vector3 current = data.predictedVehicleVelocity == null ? Vector3.ZERO : data.predictedVehicleVelocity;
         Vector3 server = new Vector3(vehicle.motionX, vehicle.motionY, vehicle.motionZ);
-        Vector3f delta = packet.getPosDelta();
-        Vector3 reported = delta == null ? Vector3.ZERO : new Vector3(delta.getX(), delta.getY(), delta.getZ());
-        if (reported.lengthSquared() > 9) reported = Vector3.ZERO;
-        VehicleSimulation simulation = bestSimulation(vehicle, packet, requested, current, server, reported, ticks);
+        VehicleSimulation simulation = bestSimulation(vehicle, packet, requested, current, server, ticks);
 
         MovementCollisionEngine.BoxCollision collision = collide(vehicle, requested);
         FloatVector resolved = collision.movement();
@@ -70,8 +67,9 @@ public final class VehiclePredictor {
     }
 
     private static VehicleSimulation bestSimulation(Entity vehicle, PlayerAuthInputPacket packet, Vector3 requested,
-                                                     Vector3 predicted, Vector3 server, Vector3 reported, int ticks) {
-        List<Vector3> starts = List.of(predicted, server, reported, Vector3.ZERO);
+                                                     Vector3 predicted, Vector3 server, int ticks) {
+        // the delta the client declares is not a start: the best candidate wins, so it always would
+        List<Vector3> starts = List.of(predicted, server, Vector3.ZERO);
         VehicleSimulation best = null;
         for (Vector3 start : starts) {
             VehicleSimulation candidate = vehicle instanceof EntityBoat

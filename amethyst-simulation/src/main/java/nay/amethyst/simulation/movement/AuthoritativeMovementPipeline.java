@@ -2,6 +2,7 @@ package nay.amethyst.simulation.movement;
 
 public final class AuthoritativeMovementPipeline {
     private static final float DESYNC_OFFSET = 8.0f;
+    private static final float GROUND_PROBE = 1.0E-3f;
 
     private boolean impulseDeferred;
 
@@ -51,16 +52,19 @@ public final class AuthoritativeMovementPipeline {
                 && !rawJumpGrace
                 && !hadKnockback;
 
+        // too far to be this tick's movement: the client is not followed, it is sent back
+        boolean desynced = simulation.reliable() && !hadTeleport
+                && state.pendingTeleports() == 0 && state.pendingCorrections() == 0
+                && !state.immobile() && positionDifference.length() > DESYNC_OFFSET;
         boolean anchored = simulation.reliable() && !hadTeleport && !hadKnockback
                 && state.pendingTeleports() == 0 && state.pendingCorrections() == 0
-                && !state.immobile();
+                && !state.immobile() && !desynced;
         if (anchored) {
             state.position(state.client().position());
         }
 
         if (hadTeleport || hadKnockback || impulseDeferred
-                || wasGliding && anchored
-                || positionDifference.length() > DESYNC_OFFSET) {
+                || wasGliding && anchored) {
             state.velocity(state.client().velocity());
         }
 
@@ -89,7 +93,7 @@ public final class AuthoritativeMovementPipeline {
                 correctionRequired, simulation.reliable(), inFluidTransition,
                 hadKnockback && !impulseDeferred, impulseDeferred, state.ticksSinceKnockback(), anchored,
                 describeSupport(world), state.supportingBlockY(), describeBelow(world),
-                state.onGround(), input.tick());
+                state.onGround(), input.tick(), desynced);
     }
 
     /**
@@ -99,6 +103,7 @@ public final class AuthoritativeMovementPipeline {
                                                                   boolean hadTeleport,
                                                                   boolean hadKnockback) {
         AuthoritativeMotionState.MotionSnapshot start = state.snapshot();
+        FloatBox startBox = state.boundingBox();
         MovementSimulator.SimulationResult result = simulator.simulate(state, world,
                 options.correctionThreshold());
         if (hadTeleport) {
@@ -125,7 +130,9 @@ public final class AuthoritativeMovementPipeline {
             }
         }
 
-        boolean clientGround = start.onGround() || state.client().verticalCollision();
+        // the flag also reports ceilings: it only stands for ground with a collider under the feet
+        boolean clientGround = start.onGround()
+                || state.client().verticalCollision() && restsOnCollider(startBox, world);
         boolean couldJump = clientGround && start.jumpDelay() == 0;
         boolean hasMovementInput = state.impulseForward() * state.impulseForward()
                 + state.impulseSideways() * state.impulseSideways() >= 1.0E-4f;
@@ -173,6 +180,12 @@ public final class AuthoritativeMovementPipeline {
 
         state.restore(best);
         return result;
+    }
+
+    private static boolean restsOnCollider(FloatBox box, MovementWorldView world) {
+        FloatBox probe = new FloatBox(box.minX(), box.minY() - GROUND_PROBE, box.minZ(),
+                box.maxX(), box.minY(), box.maxZ());
+        return !world.collisionBoxes(probe).isEmpty();
     }
 
     /** Id of the block the simulation believes is holding the player up. */

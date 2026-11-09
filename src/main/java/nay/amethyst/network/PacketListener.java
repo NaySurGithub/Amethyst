@@ -156,6 +156,8 @@ public final class PacketListener implements Listener {
             PlayerData data = players.get(player.getUniqueId());
             if (data == null || !data.joined) continue;
             data.network.tick(now);
+            // an unanswered probe is applied after the cutoff: withholding it cannot hold state back
+            runAcknowledgments(data.network.expireDelayedAcks());
             if (player.getRiding() != null) {
                 data.lastRidingNanos = now;
             }
@@ -909,7 +911,7 @@ public final class PacketListener implements Listener {
             var frame = data.history.latest();
             float yaw = frame == null ? (float) player.yaw : frame.yaw();
             float pitch = frame == null ? (float) player.pitch : frame.pitch();
-            prepareRiptide(player, data, yaw, pitch, data.lastTick);
+            prepareRiptide(player, data, yaw, pitch, data.inputSequence);
         } else if (type == PlayerActionType.STOP_SPIN_ATTACK) {
             data.stopRiptide();
         }
@@ -920,7 +922,7 @@ public final class PacketListener implements Listener {
         if (packet.getInputData().contains(PlayerAuthInputData.START_USING_ITEM)) {
             Item item = riptideTrident(player);
             if (item != null) {
-                data.riptideUseStartTick = packet.getClientTick();
+                data.riptideUseStartTick = data.inputSequence + 1;
             }
         }
         if (packet.getInputData().contains(PlayerAuthInputData.STOP_SPIN_ATTACK)) {
@@ -929,7 +931,7 @@ public final class PacketListener implements Listener {
         if (packet.getInputData().contains(PlayerAuthInputData.START_SPIN_ATTACK)) {
             Vector3f rotation = packet.getPlayerRotation();
             prepareRiptide(player, data, rotation.getY(), rotation.getX(),
-                    packet.getClientTick());
+                    data.inputSequence + 1);
         }
     }
 
@@ -1041,10 +1043,10 @@ public final class PacketListener implements Listener {
         if (used != null && used.getDefinition() != null
                 && ItemID.TRIDENT.equals(used.getDefinition().getIdentifier())
                 && riptideTrident(player) != null) {
-            data.riptideUseStartTick = data.lastTick;
+            data.riptideUseStartTick = data.inputSequence;
         }
         if (item != null && !item.isNull() && item.isConsumable()) {
-            data.itemUseStartTick = data.lastTick;
+            data.itemUseStartTick = data.inputSequence;
             if (item.getUseDuration() > 0.0f) {
                 data.motion.consuming(true);
             }
@@ -1060,7 +1062,8 @@ public final class PacketListener implements Listener {
             return;
         }
 
-        long ticks = data.lastTick - start;
+        // counted in accepted inputs: a client tick that jumps ahead must not shorten the use
+        long ticks = data.inputSequence - start;
         if (ticks >= FAST_USE_MINIMUM_TICKS) {
             return;
         }

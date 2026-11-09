@@ -191,7 +191,7 @@ public final class AuthoritativeMotionState {
         if (input.has(MovementInputFlag.STOP_GLIDING)) {
             gliding = false;
             glideBoostTicks = 0;
-        } else if (input.has(MovementInputFlag.START_GLIDING)) {
+        } else if (input.has(MovementInputFlag.START_GLIDING) && wearingElytra) {
             gliding = true;
         }
     }

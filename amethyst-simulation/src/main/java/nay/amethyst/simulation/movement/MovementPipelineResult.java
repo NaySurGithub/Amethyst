@@ -18,7 +18,8 @@ public record MovementPipelineResult(
         int supportingBlockY,
         String blockBelow,
         boolean onGround,
-        long tick
+        long tick,
+        boolean desynced
 ) {
     public float offset() {
         return positionDifference.length();

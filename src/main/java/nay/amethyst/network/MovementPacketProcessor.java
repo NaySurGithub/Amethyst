@@ -39,7 +39,6 @@ import java.util.UUID;
 public final class MovementPacketProcessor {
     private static final double BURST_MATCH_DISTANCE = 0.35;
     private static final long TELEPORT_GRACE_MILLIS = 3000;
-    private static final double DESYNC_OFFSET = 8.0;
     private static final int VELOCITY_OBSERVE_TICKS = 4;
     private static final double VELOCITY_MINIMUM_RATIO = 0.5;
     private static final double VELOCITY_MAXIMUM_RATIO = 1.8;
@@ -186,6 +185,11 @@ public final class MovementPacketProcessor {
                 data.stuckInCollider = data.motion.stuckInCollider();
                 if (data.motion.wearingElytra() && !result.onGround()) {
                     data.lastGlideTick = data.lastTick;
+                }
+                if (result.desynced() && !beyondSimulatedSpeed(player)) {
+                    data.simulationMismatchFrames = 0;
+                    sendSimulationCorrection(event, player, data, result);
+                    return;
                 }
                 if (inspectAirStall(event, player, data, result, observedMovement)) {
                     return;
@@ -522,8 +526,9 @@ public final class MovementPacketProcessor {
             return;
         }
 
+        // counted in accepted inputs: the client tick is the client's to choose
         long previousStart = data.lastGlideStartTick;
-        data.lastGlideStartTick = data.lastTick;
+        data.lastGlideStartTick = data.inputSequence;
         if (data.inGrace() || player.isSpectator()) {
             return;
         }
@@ -532,7 +537,7 @@ public final class MovementPacketProcessor {
             violations.fail(event, player, data, CheckType.ELYTRA_A, 1, "riding", false, true);
         }
         if (previousStart != Long.MIN_VALUE) {
-            long since = data.lastTick - previousStart;
+            long since = data.inputSequence - previousStart;
             if (since < ELYTRA_START_TICKS) {
                 violations.fail(event, player, data, CheckType.ELYTRA_B, 1,
                         "restarted after " + since + " ticks", false, true);
@@ -621,11 +626,6 @@ public final class MovementPacketProcessor {
             return;
         }
         if (result.ticksSinceImpulse() <= VELOCITY_OBSERVE_TICKS) {
-            data.simulationOffsetBuffer = 0.0;
-            return;
-        }
-
-        if (result.offset() > DESYNC_OFFSET) {
             data.simulationOffsetBuffer = 0.0;
             return;
         }

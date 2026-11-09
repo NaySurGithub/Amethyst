@@ -40,12 +40,23 @@ public final class MovementSimulator {
             FloatVector v = state.velocity();
             state.velocity(new FloatVector(v.x() + 0.0f, v.y() + 0.1f, v.z() + 0.0f));
         }
+        boolean clientInsideCollider = !state.hasTeleport() && clientInsideCollider(state, world);
+        FloatVector start = state.position();
         // fluid current, before the travel of any medium
         FluidCurrent.apply(state, world, state.boundingBox());
 
         PredictionEngine engine = engineFor(state, world, correctionThreshold);
         SimulationResult result = engine.run();
         state.inWater(engine instanceof WaterPredictionEngine);
+        // an overlap the client claims suspends the tick only while it moves no farther than the
+        // simulation; the simulated velocity is kept so a declared delta cannot feed the next tick
+        if (clientInsideCollider && state.client().position().subtract(start).length()
+                <= state.position().subtract(start).length()) {
+            FloatVector velocity = state.velocity();
+            state.resetToClient();
+            state.velocity(velocity);
+            return result(state, false);
+        }
         return result;
     }
 
@@ -95,13 +106,17 @@ public final class MovementSimulator {
         if (world.hasMovingBlock(state.boundingBox())
                 || !state.riptideActive() && world.hasSolidEntityNearby(state.boundingBox())
                 // temp until i fix that shi
-                || world.hasBambooNearby(state.boundingBox())
-                || !MovementCollisionEngine.solid(world.collisionBoxes(state.clientBoundingBox()), world,
-                        state.clientBoundingBox().minY(), false).isEmpty()) {
+                || world.hasBambooNearby(state.boundingBox())) {
             return false;
         }
         return !state.flying() && !state.justDisabledFlight() && !state.noClip()
                 && state.alive() && state.supportedGameMode();
+    }
+
+    private static boolean clientInsideCollider(AuthoritativeMotionState state,
+                                                MovementWorldView world) {
+        return !MovementCollisionEngine.solid(world.collisionBoxes(state.clientBoundingBox()), world,
+                state.clientBoundingBox().minY(), false).isEmpty();
     }
 
     private static boolean attemptTeleport(AuthoritativeMotionState state,

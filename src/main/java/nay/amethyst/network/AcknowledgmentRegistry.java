@@ -26,7 +26,17 @@ public final class AcknowledgmentRegistry {
             timestamp = nextTimestamp;
         } while (pending.containsKey(timestamp));
         pending.put(timestamp, new Pending(now, serverTick, type, List.copyOf(callbacks)));
-        while (pending.size() > MAX_PENDING) pending.remove(pending.keySet().iterator().next());
+        while (pending.size() > MAX_PENDING) {
+            // over the cap the oldest entry is folded into the next, so no callback is lost
+            Iterator<Map.Entry<Long, Pending>> iterator = pending.entrySet().iterator();
+            Pending dropped = iterator.next().getValue();
+            iterator.remove();
+            Map.Entry<Long, Pending> next = iterator.next();
+            List<Runnable> merged = new ArrayList<>(dropped.callbacks());
+            merged.addAll(next.getValue().callbacks());
+            next.setValue(new Pending(next.getValue().sentNanos(), next.getValue().serverTick(),
+                    next.getValue().type(), merged));
+        }
         return timestamp;
     }
 
@@ -46,13 +56,15 @@ public final class AcknowledgmentRegistry {
 
     public synchronized List<Runnable> expire(long serverTick, long cutoffTicks) {
         if (pending.isEmpty()) return List.of();
+        List<Runnable> callbacks = new ArrayList<>();
         Iterator<Pending> iterator = pending.values().iterator();
         while (iterator.hasNext()) {
             Pending acknowledgment = iterator.next();
             if (serverTick - acknowledgment.serverTick() < cutoffTicks) break;
             iterator.remove();
+            callbacks.addAll(acknowledgment.callbacks());
         }
-        return List.of();
+        return callbacks;
     }
 
     public synchronized void reset() {
