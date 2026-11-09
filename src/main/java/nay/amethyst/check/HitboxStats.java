@@ -34,6 +34,17 @@ public final class HitboxStats {
         }
     }
 
+    /** The figures as they stand, for whoever wants to lay them out. */
+    public record Snapshot(long hits, double clickAverage, double clickMax, long beyondTenth,
+                           long unrelated, double originAverage, double originMax) {
+    }
+
+    public synchronized Snapshot snapshot() {
+        long related = hits - unrelated;
+        return new Snapshot(hits, related == 0 ? 0.0 : clickSum / related, clickMax, beyond[2],
+                unrelated, hits == 0 ? 0.0 : originSum / hits, originMax);
+    }
+
     public synchronized String describe() {
         long related = hits - unrelated;
         StringBuilder text = new StringBuilder(String.format(Locale.ROOT,

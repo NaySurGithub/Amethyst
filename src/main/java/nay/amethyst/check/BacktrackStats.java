@@ -70,6 +70,16 @@ public final class BacktrackStats {
                 late, size, late / (double) size, delay / late * 50.0, longest * 50.0, saved / late));
     }
 
+    public record Snapshot(long hits, long receding, long late, double ratio, double delayMillis,
+                           double longestDelayMillis, double gain) {
+    }
+
+    public synchronized Snapshot snapshot() {
+        return new Snapshot(hits, receding, rewound, receding == 0 ? 0.0 : rewound / (double) receding,
+                rewound == 0 ? 0.0 : delayTicks / rewound * 50.0, longestDelayTicks * 50.0,
+                rewound == 0 ? 0.0 : gain / rewound);
+    }
+
     /** Everything gathered since the player joined. */
     public synchronized String describe() {
         double share = receding == 0 ? 0.0 : rewound / (double) receding;

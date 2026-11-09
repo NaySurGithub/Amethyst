@@ -8,6 +8,9 @@ import nay.amethyst.player.PlayerData;
 import org.powernukkitx.Player;
 import org.powernukkitx.command.Command;
 import org.powernukkitx.command.CommandSender;
+import org.powernukkitx.command.PluginCommand;
+import org.powernukkitx.command.data.CommandParameter;
+import org.cloudburstmc.protocol.bedrock.data.command.CommandParamType;
 import org.powernukkitx.event.Event;
 import org.powernukkitx.event.EventHandler;
 import org.powernukkitx.event.Listener;
@@ -50,6 +53,7 @@ public final class AmethystPlugin extends PluginBase {
         movementSessions.setRejectionHandler(listener::handleEarlyMovementRejection);
         movementSessions.setTimelineProvider(listener::networkTimeline);
         registerEvents(listener);
+        registerCommandParameters();
         getServer().getScheduler().scheduleRepeatingTask(this, listener::onServerTick, 1);
         getServer().getScheduler().scheduleRepeatingTask(this, this::concealContainers, 1);
         getLogger().info("Amethyst is enabled don't worry about hackers");
@@ -144,46 +148,74 @@ public final class AmethystPlugin extends PluginBase {
         }
     }
 
+    private static final String PREFIX = "§u[Amethyst] §f";
+
+    private void registerCommandParameters() {
+        PluginCommand<?> command = getPluginCommand("amethyst");
+        if (command == null) return;
+        command.getCommandParameters().clear();
+        command.addCommandParameters("action", new CommandParameter[]{
+                CommandParameter.newEnum("action", true, new String[]{"status", "reload", "alerts"})});
+        command.addCommandParameters("data", new CommandParameter[]{
+                CommandParameter.newEnum("data", new String[]{"data"}),
+                CommandParameter.newType("player", true, CommandParamType.SELECTION)});
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!command.getName().equalsIgnoreCase("amethyst")) return false;
         if (!sender.hasPermission("amethyst.alerts")) {
-            sender.sendMessage("You do not have permission to use this command.");
+            sender.sendMessage(PREFIX + "§cYou are not allowed to use this.");
             return true;
         }
-        if (args.length == 0 || args[0].equalsIgnoreCase("status")) {
-            sender.sendMessage("Amethyst " + getDescription().getVersion() + " | tracked=" + players.size() + " | alerts=" + alertsEnabled);
-            sender.sendMessage(memoryStatus());
-            return true;
+        String action = args.length == 0 ? "status" : args[0].toLowerCase(java.util.Locale.ROOT);
+        switch (action) {
+            case "status" -> sender.sendMessage(PREFIX + "v" + getDescription().getVersion()
+                    + " §7· §f" + players.size() + " §7tracked · alerts " + onOff(alertsEnabled));
+            case "reload" -> {
+                loadSettings();
+                sender.sendMessage(PREFIX + "Configuration reloaded.");
+            }
+            case "alerts" -> {
+                toggleAlerts();
+                sender.sendMessage(PREFIX + "Alerts " + onOff(alertsEnabled));
+            }
+            case "data" -> sendData(sender, args);
+            case "gc" -> {
+                sender.sendMessage(PREFIX + "§7before §f" + memoryStatus());
+                System.gc();
+                getServer().getScheduler().scheduleDelayedTask(this,
+                        () -> sender.sendMessage(PREFIX + "§7after §f" + memoryStatus()), 20);
+            }
+            default -> sender.sendMessage(PREFIX + "§7/amethyst §f[status|reload|alerts|data <player>]");
         }
-        if (args[0].equalsIgnoreCase("gc")) {
-            sender.sendMessage("before-gc " + memoryStatus());
-            System.gc();
-            getServer().getScheduler().scheduleDelayedTask(this,
-                    () -> sender.sendMessage("after-gc " + memoryStatus()), 20);
-            return true;
+        return true;
+    }
+
+    private static String onOff(boolean value) {
+        return value ? "§aon" : "§coff";
+    }
+
+    /** What the data-gathering checks hold on a player, the sender when none is named. */
+    private void sendData(CommandSender sender, String[] args) {
+        Player target = args.length >= 2 ? getServer().getPlayer(args[1])
+                : sender instanceof Player self ? self : null;
+        PlayerData data = getPlayerData(target);
+        if (data == null) {
+            sender.sendMessage(PREFIX + "§cNo tracked player by that name.");
+            return;
         }
-        if (args[0].equalsIgnoreCase("reload")) {
-            loadSettings();
-            sender.sendMessage("Amethyst configuration reloaded.");
-            return true;
-        }
-        if (args[0].equalsIgnoreCase("backtrack") || args[0].equalsIgnoreCase("hitbox")) {
-            boolean backtrack = args[0].equalsIgnoreCase("backtrack");
-            Player target = args.length < 2 ? null : getServer().getPlayer(args[1]);
-            PlayerData data = getPlayerData(target);
-            sender.sendMessage(data == null
-                    ? "Usage: /amethyst " + (backtrack ? "backtrack" : "hitbox") + " <online player>"
-                    : (backtrack ? "Backtrack " : "Hitbox ") + target.getName() + " | "
-                            + (backtrack ? data.backtrack.describe() : data.hitbox.describe()));
-            return true;
-        }
-        if (args[0].equalsIgnoreCase("alerts")) {
-            toggleAlerts();
-            sender.sendMessage("Amethyst alerts=" + alertsEnabled);
-            return true;
-        }
-        return false;
+        var hitbox = data.hitbox.snapshot();
+        var backtrack = data.backtrack.snapshot();
+        sender.sendMessage(PREFIX + target.getName());
+        sender.sendMessage(String.format(java.util.Locale.ROOT,
+                " §uHitbox-B §f%d §7hits · point avg §f%.3f §7max §f%.3f §7· over 0.1 §f%d §7· origin avg §f%.3f §7max §f%.3f",
+                hitbox.hits(), hitbox.clickAverage(), hitbox.clickMax(), hitbox.beyondTenth(),
+                hitbox.originAverage(), hitbox.originMax()));
+        sender.sendMessage(String.format(java.util.Locale.ROOT,
+                " §uBacktrack-B §f%d §7hits · §f%d §7receding · §f%d §7late (§f%.0f%%§7) · delay §f%.0fms §7max §f%.0fms §7· gain §f%.2f",
+                backtrack.hits(), backtrack.receding(), backtrack.late(), backtrack.ratio() * 100.0,
+                backtrack.delayMillis(), backtrack.longestDelayMillis(), backtrack.gain()));
     }
 
     private static long mib(long bytes) {

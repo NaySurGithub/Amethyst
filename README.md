@@ -177,8 +177,7 @@ If you need to tune anything, start with `prediction.tolerance` and `prediction.
 | `/amethyst status` | Tracked players and alert state. |
 | `/amethyst reload` | Reloads `config.yml`. |
 | `/amethyst alerts` | Toggles alerts until the next reload. |
-| `/amethyst hitbox <player>` | Shows what `Hitbox-B` measured on a player's attacks since they joined. |
-| `/amethyst backtrack <player>` | Shows what `Backtrack-B` gathered on a player since they joined. |
+| `/amethyst data [player]` | Shows what `Hitbox-B` and `Backtrack-B` gathered on a player since they joined. |
 
 | Permission | Default | Description |
 | --- | --- | --- |
