@@ -72,6 +72,12 @@ public final class PlayerData {
     private long lastViolationDecayNanos;
     /** Bed the current teleport exemption was granted for; the exemption ends away from it. */
     public Vector3 bedAnchor;
+    /** amethyst.bypass, refreshed once a tick: asking the permission on every packet adds up. */
+    public volatile boolean bypass;
+    public final nay.amethyst.check.BacktrackStats backtrack = new nay.amethyst.check.BacktrackStats();
+    /** Entity last attacked: its movement is confirmed packet by packet, never batched. */
+    public volatile long combatTargetId = -1;
+    public volatile long combatTargetNanos;
     public long lastGlideStartTick = Long.MIN_VALUE;
     public long itemUseStartTick = Long.MIN_VALUE;
     public long riptideUseStartTick = Long.MIN_VALUE;

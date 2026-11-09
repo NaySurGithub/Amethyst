@@ -6,6 +6,7 @@ public record ClientEntityView(
         long runtimeId,
         Vector3 previousPosition,
         Vector3 position,
+        Vector3 sentPosition,
         boolean player,
         int ticksSinceTeleport,
         double width,

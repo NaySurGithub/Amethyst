@@ -28,6 +28,9 @@ conceal-containers:
   margin: 0.5
   # Ticks between two passes.
   interval: 4
+# One latency probe per tick confirms every entity movement sent in it, instead of one per packet.
+# Far fewer packets both ways; tracked entity positions may trail the client by up to one tick.
+batch-entity-acknowledgments: true
 max-packet-actions: 12
 inventory-move:
   input-threshold: 0.075
@@ -39,6 +42,15 @@ timer:
   # How far (ms) the client's clock may run ahead of real time. The clock is re-anchored on every
   # latency acknowledgment, so late or bunched packets from a poor connection never add up here.
   tolerance-ms: 100
+backtrack:
+  # Hits on a target moving away that are kept, most recent first.
+  window: 40
+  # Hits needed in the window before it is judged.
+  minimum-samples: 20
+  # Share of those hits that only land on a position older than the one the client confirmed.
+  ratio: 0.25
+  # Prints every such hit to the console. Use it to gather data before trusting the ratio.
+  log-samples: false
 prediction:
   # Offset, in blocks, ignored on a single tick. Anything above it feeds the buffer below.
   tolerance: 0.05

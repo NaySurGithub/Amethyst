@@ -168,6 +168,13 @@ public final class AmethystPlugin extends PluginBase {
             sender.sendMessage("Amethyst configuration reloaded.");
             return true;
         }
+        if (args[0].equalsIgnoreCase("backtrack")) {
+            Player target = args.length < 2 ? null : getServer().getPlayer(args[1]);
+            PlayerData data = getPlayerData(target);
+            sender.sendMessage(data == null ? "Usage: /amethyst backtrack <online player>"
+                    : "Backtrack " + target.getName() + " | " + data.backtrack.describe());
+            return true;
+        }
         if (args[0].equalsIgnoreCase("alerts")) {
             toggleAlerts();
             sender.sendMessage("Amethyst alerts=" + alertsEnabled);

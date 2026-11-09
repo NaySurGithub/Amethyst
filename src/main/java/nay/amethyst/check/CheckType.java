@@ -43,7 +43,8 @@ public enum CheckType {
     ELYTRA_B("Elytra-B", "Started gliding again too soon."),
     CHEST_STEALER_A("ChestStealer-A", "Moved items out of a container too quickly."),
     AUTO_TOTEM_A("AutoTotem-A", "Swapped a totem into the offhand too quickly after it popped."),
-    BACKTRACK_A("Backtrack-A", "Sent actor movement for an entity the player is not riding.");
+    BACKTRACK_A("Backtrack-A", "Sent actor movement for an entity the player is not riding."),
+    BACKTRACK_B("Backtrack-B", "Hits keep landing where the target was, not where the client confirmed it.", true);
 
     private final String id;
     private final String description;

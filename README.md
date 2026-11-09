@@ -81,6 +81,7 @@ Drop the jar into `plugins/` and restart. There are no dependencies.
 | `Autoclicker-A` | Clicks per second above the configured ceiling. |
 | `AutoTotem-A` | Totem swapped into the offhand within milliseconds of the last one popping. |
 | `Backtrack-A` | Withheld entity positions replayed later. |
+| `Backtrack-B` | Hits that keep landing where the target was, not where the client confirmed it. |
 
 **World and inventory**
 | Check | Detects |
@@ -128,6 +129,7 @@ creative and spectator players are exempt.
 | `updates.check` | `true` | Checks for a newer release on startup. |
 | `setback-violations` | `2.0` | Violations before a movement setback. |
 | `violation-decay-seconds` | `30` | Seconds after which every check loses one violation. `0` keeps them forever. |
+| `batch-entity-acknowledgments` | `true` | Confirms a tick's entity movements with one probe instead of one per packet. |
 | `max-packet-actions` | `12` | Block actions accepted in one input packet. |
 | `prediction.tolerance` | `0.05` | Offset ignored on a single tick, in blocks. |
 | `prediction.buffer-threshold` | `0.6` | Accumulated excess needed before flagging. |
@@ -146,6 +148,10 @@ creative and spectator players are exempt.
 | `combat.close-range-angle` | `60.0` | Angle allowed by that fallback. |
 | `combat.cps-limit` | `24` | Clicks per second from keyboard, mouse or controller. |
 | `combat.touch-cps-limit` | `24` | Clicks per second from touch input. |
+| `backtrack.window` | `40` | Hits on a target moving away that `Backtrack-B` keeps. |
+| `backtrack.minimum-samples` | `20` | Hits needed in the window before it is judged. |
+| `backtrack.ratio` | `0.25` | Share of those hits that only land on an older position than the confirmed one. |
+| `backtrack.log-samples` | `false` | Prints every such hit to the console, to gather data. |
 | `blocks.max-reach` | `7.0` | Block interaction distance. |
 | `blocks.break-leniency-ms` | `75` | Network leniency on mining time. |
 | `inventory-move.input-threshold` | `0.075` | Directional input ignored as controller drift. |
@@ -167,6 +173,7 @@ If you need to tune anything, start with `prediction.tolerance` and `prediction.
 | `/amethyst status` | Tracked players and alert state. |
 | `/amethyst reload` | Reloads `config.yml`. |
 | `/amethyst alerts` | Toggles alerts until the next reload. |
+| `/amethyst backtrack <player>` | Shows what `Backtrack-B` gathered on a player since they joined. |
 
 | Permission | Default | Description |
 | --- | --- | --- |

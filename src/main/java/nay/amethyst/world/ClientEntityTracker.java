@@ -94,8 +94,10 @@ public final class ClientEntityTracker {
         TrackedEntity entity = entities.get(runtimeId);
         if (entity == null) return false;
         Vector3 previous = entity.serverPosition;
+        // the stored height is already at the feet: an absent y goes back up before the conversion below
+        double keptY = previous.y + (entity.player ? PLAYER_HEIGHT_OFFSET : 0.0);
         Vector3 position = new Vector3(x == null ? previous.x : x,
-                y == null ? previous.y : y, z == null ? previous.z : z);
+                y == null ? keptY : y, z == null ? previous.z : z);
         return queueAbsolute(runtimeId, Vector3f.from(position.x, position.y, position.z), teleport);
     }
 
@@ -144,7 +146,7 @@ public final class ClientEntityTracker {
     public synchronized ClientEntityView view(long runtimeId) {
         TrackedEntity entity = entities.get(runtimeId);
         return entity == null ? null : new ClientEntityView(runtimeId, entity.previousPosition,
-                entity.position, entity.player, entity.ticksSinceTeleport,
+                entity.position, entity.serverPosition, entity.player, entity.ticksSinceTeleport,
                 entity.width, entity.height, entity.scale);
     }
 

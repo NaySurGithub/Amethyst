@@ -1,6 +1,7 @@
 package nay.amethyst.network;
 
 import nay.amethyst.AmethystPlugin;
+import nay.amethyst.check.BacktrackStats;
 import nay.amethyst.check.CheckType;
 import nay.amethyst.player.PlayerData;
 import nay.amethyst.prediction.CombatPredictionResult;
@@ -85,6 +86,37 @@ public final class CombatPacketProcessor {
             violations.fail(event, player, data, CheckType.REACH_A, 1,
                     "ray=" + NetworkCheckSupport.format(result.rayDistance())
                             + " raw=" + NetworkCheckSupport.format(result.rawDistance()), true, false);
+        } else if (target instanceof Player) {
+            inspectBacktrack(event, player, data, target, expansion, leniency, steps, maximumAngle,
+                    closeRange, closeAngle);
+        }
+    }
+
+    /** Samples an accepted hit: was the target moving away, and did the hit need an older position. */
+    private void inspectBacktrack(PacketReceiveEvent event, Player player, PlayerData data, Entity target,
+                                  double expansion, double leniency, int steps, double maximumAngle,
+                                  double closeRange, double closeAngle) {
+        var settings = plugin.settings();
+        if (settings.disabledCheck(CheckType.BACKTRACK_B.id())) return;
+        CombatPredictor.Rewind rewind = predictor.rewind(data, target.getId(), expansion, leniency,
+                steps, maximumAngle, closeRange, closeAngle, data.touchInput);
+        if (rewind == null) return;
+        data.backtrack.countHit();
+        if (!rewind.receding()) return;
+        data.backtrack.add(new BacktrackStats.Sample(rewind.rewound(), rewind.delayTicks(), rewind.gain()),
+                settings.backtrackWindow());
+        if (rewind.rewound() && settings.backtrackLogSamples()) {
+            plugin.getLogger().info("[Amethyst] backtrack sample " + player.getName()
+                    + " -> " + target.getName()
+                    + " delay=" + NetworkCheckSupport.format(rewind.delayTicks() * 50.0) + "ms"
+                    + " gain=" + NetworkCheckSupport.format(rewind.gain())
+                    + " rtt=" + data.network.stackLatencyMillis() + "ms"
+                    + " | " + data.backtrack.describe());
+        }
+        BacktrackStats.Verdict verdict = data.backtrack.evaluate(settings.backtrackMinimumSamples(),
+                settings.backtrackRatio());
+        if (verdict.failed()) {
+            violations.fail(event, player, data, CheckType.BACKTRACK_B, 1, verdict.detail(), false, false);
         }
     }
 }

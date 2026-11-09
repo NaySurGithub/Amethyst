@@ -154,7 +154,9 @@ public final class PacketListener implements Listener {
         long now = System.nanoTime();
         for (Player player : plugin.getServer().getOnlinePlayers().values()) {
             PlayerData data = players.get(player.getUniqueId());
-            if (data == null || !data.joined) continue;
+            if (data == null) continue;
+            data.bypass = player.hasPermission("amethyst.bypass");
+            if (!data.joined) continue;
             data.network.tick(now);
             // an unanswered probe is applied after the cutoff: withholding it cannot hold state back
             runAcknowledgments(data.network.expireDelayedAcks());
@@ -163,6 +165,7 @@ public final class PacketListener implements Listener {
                 data.lastRidingNanos = now;
             }
             inspectTimer(player, data, now);
+            flushEntityTracker(player, data);
             if (data.network.shouldProbe()) sendAcknowledgment(player, data, null);
         }
     }
@@ -177,7 +180,7 @@ public final class PacketListener implements Listener {
         data.network.drainOverBudgetInputs();
         data.network.drainInputCount();
         long ahead = data.network.drainTimerAheadNanos();
-        if (data.inGrace() || player.hasPermission("amethyst.bypass")
+        if (data.inGrace() || data.bypass
                 || plugin.settings().disabledCheck(CheckType.TIMER.id())) {
             data.network.resetTimerClock(now);
             data.timerWarmup = 0;
@@ -235,6 +238,7 @@ public final class PacketListener implements Listener {
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         PlayerData data = data(player);
+        data.bypass = player.hasPermission("amethyst.bypass");
         data.joined = true;
         data.safeLocation = player.getLocation();
         var chain = player.getClientChainData();
@@ -361,9 +365,9 @@ public final class PacketListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     public void onReceive(PacketReceiveEvent event) {
         Player player = event.getPlayer();
-        if (player == null || player.hasPermission("amethyst.bypass")) return;
+        if (player == null) return;
         PlayerData playerData = players.get(player.getUniqueId());
-        if (playerData == null || !playerData.joined) return;
+        if (playerData == null || !playerData.joined || playerData.bypass) return;
         if (event.getPacket() instanceof NetworkStackLatencyPacket packet) {
             runAcknowledgments(playerData.network.acknowledge(packet.getCreationTime(), System.nanoTime()));
             return;
@@ -418,6 +422,8 @@ public final class PacketListener implements Listener {
             if (packet.getTransaction() instanceof ItemUseOnActorInventoryTransaction attack
                     && attack.getActionType() == ItemUseOnActorActionType.ATTACK) {
                 playerData.lastCombatNanos = System.nanoTime();
+                playerData.combatTargetId = attack.getRuntimeId();
+                playerData.combatTargetNanos = playerData.lastCombatNanos;
                 int clicks = Math.max(playerData.leftCps(), playerData.clickAttack());
                 if (inspectClickRate(event, player, playerData, clicks, "left")) {
                     return;
@@ -474,9 +480,30 @@ public final class PacketListener implements Listener {
     public void onSend(PacketSendEvent event) {
         if (players.isEmpty()) return;
         Player player = event.getPlayer();
-        if (player == null || player.hasPermission("amethyst.bypass")) return;
+        if (player == null) return;
         PlayerData data = players.get(player.getUniqueId());
-        if (data == null) return;
+        if (data == null || data.bypass) return;
+        // entity movement first: it is most of what a server sends
+        if (event.getPacket() instanceof MoveActorDeltaPacket packet) {
+            var move = packet.getMoveData();
+            if (move != null && move.getActorRuntimeID() != player.getId()
+                    && (data.clientEntities.queueDelta(move.getActorRuntimeID(), move.getNewPositionX(),
+                    move.getNewPositionY(), move.getNewPositionZ(),
+                    packet.getFlags().contains(MoveActorDeltaPacket.Flag.TELEPORTING))
+                    || combatTarget(data, move.getActorRuntimeID()))) {
+                flushEntityTrackerAfter(event, player, data, move.getActorRuntimeID());
+            }
+            return;
+        }
+        if (event.getPacket() instanceof MoveActorAbsolutePacket packet) {
+            var move = packet.getMoveData();
+            if (move != null && move.getActorRuntimeID() != player.getId()
+                    && (data.clientEntities.queueAbsolute(move.getActorRuntimeID(), move.getPos(), move.isTeleported())
+                    || combatTarget(data, move.getActorRuntimeID()))) {
+                flushEntityTrackerAfter(event, player, data, move.getActorRuntimeID());
+            }
+            return;
+        }
         if (event.getPacket() instanceof ActorEventPacket actorEvent
                 && actorEvent.getType() == ActorEvent.TALISMAN_ACTIVATE
                 && actorEvent.getTargetRuntimeID() == player.getId()) {
@@ -631,7 +658,7 @@ public final class PacketListener implements Listener {
             if (packet.getTargetRuntimeID() != player.getId()
                     && data.clientEntities.queueAdd(packet.getTargetRuntimeID(), packet.getPosition(),
                     true, packet.getActorData(), null, false)) {
-                flushEntityTrackerAfter(event, player, data);
+                flushEntityTrackerAfter(event, player, data, -1L);
             }
             return;
         }
@@ -641,7 +668,7 @@ public final class PacketListener implements Listener {
                     && data.clientEntities.queueAdd(packet.getTargetRuntimeID(), packet.getPosition(),
                     false, packet.getActorData(), packet.getActorType(),
                     entity instanceof EntityProjectile)) {
-                flushEntityTrackerAfter(event, player, data);
+                flushEntityTrackerAfter(event, player, data, -1L);
             }
             return;
         }
@@ -683,34 +710,17 @@ public final class PacketListener implements Listener {
                     }
                 }
             } else if (packet.getPositionMode() != PositionMode.ONLY_HEAD_ROT
-                    && data.clientEntities.queueAbsolute(packet.getPlayerRuntimeID(), packet.getPosition(),
-                    packet.getPositionMode() == PositionMode.TELEPORT)) {
-                flushEntityTrackerAfter(event, player, data);
-            }
-            return;
-        }
-        if (event.getPacket() instanceof MoveActorAbsolutePacket packet) {
-            var move = packet.getMoveData();
-            if (move != null && move.getActorRuntimeID() != player.getId()
-                    && data.clientEntities.queueAbsolute(move.getActorRuntimeID(), move.getPos(), move.isTeleported())) {
-                flushEntityTrackerAfter(event, player, data);
-            }
-            return;
-        }
-        if (event.getPacket() instanceof MoveActorDeltaPacket packet) {
-            var move = packet.getMoveData();
-            if (move != null && move.getActorRuntimeID() != player.getId()
-                    && data.clientEntities.queueDelta(move.getActorRuntimeID(), move.getNewPositionX(),
-                    move.getNewPositionY(), move.getNewPositionZ(),
-                    packet.getFlags().contains(MoveActorDeltaPacket.Flag.TELEPORTING))) {
-                flushEntityTrackerAfter(event, player, data);
+                    && (data.clientEntities.queueAbsolute(packet.getPlayerRuntimeID(), packet.getPosition(),
+                    packet.getPositionMode() == PositionMode.TELEPORT)
+                    || combatTarget(data, packet.getPlayerRuntimeID()))) {
+                flushEntityTrackerAfter(event, player, data, packet.getPlayerRuntimeID());
             }
             return;
         }
         if (event.getPacket() instanceof RemoveActorPacket packet) {
             data.grantGracePeriod(GraceReason.ENTITY_DESPAWN, GRACE_MILLIS);
             if (data.clientEntities.queueRemove(packet.getTargetActorID())) {
-                flushEntityTrackerAfter(event, player, data);
+                flushEntityTrackerAfter(event, player, data, -1L);
             }
             return;
         }
@@ -746,7 +756,7 @@ public final class PacketListener implements Listener {
                     });
                 }
             } else if (data.clientEntities.queueSize(packet.getTargetRuntimeID(), packet.getActorData())) {
-                flushEntityTrackerAfter(event, player, data);
+                flushEntityTrackerAfter(event, player, data, -1L);
             }
             return;
         }
@@ -1155,7 +1165,26 @@ public final class PacketListener implements Listener {
         });
     }
 
-    private void flushEntityTrackerAfter(PacketSendEvent event, Player player, PlayerData data) {
+    /** One probe for everything the tracker queued since the last tick. */
+    private void flushEntityTracker(Player player, PlayerData data) {
+        List<ClientEntityTracker.Update> updates = data.clientEntities.drainQueuedUpdates();
+        if (updates.isEmpty() || !player.isOnline()) return;
+        sendAcknowledgment(player, data, AcknowledgmentType.ENTITY,
+                () -> data.clientEntities.acknowledge(updates));
+    }
+
+    private static final long COMBAT_TARGET_NANOS = 10_000_000_000L;
+
+    private static boolean combatTarget(PlayerData data, long runtimeId) {
+        return runtimeId == data.combatTargetId
+                && System.nanoTime() - data.combatTargetNanos < COMBAT_TARGET_NANOS;
+    }
+
+    private void flushEntityTrackerAfter(PacketSendEvent event, Player player, PlayerData data,
+                                         long runtimeId) {
+        // batched: the queue stays open and the next server tick confirms it in one probe. the entity
+        // being fought is the exception, Backtrack-B needs to know which position was confirmed when
+        if (plugin.settings().batchEntityAcknowledgments() && !combatTarget(data, runtimeId)) return;
         List<ClientEntityTracker.Update> updates = data.clientEntities.drainQueuedUpdates();
         if (updates.isEmpty() || !player.isOnline()) return;
         sendAcknowledgmentAfter(event, player, data, AcknowledgmentType.ENTITY,
