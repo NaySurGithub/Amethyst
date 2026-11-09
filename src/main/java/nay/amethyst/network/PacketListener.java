@@ -122,10 +122,8 @@ public final class PacketListener implements Listener {
     private static final Set<String> THROWN_FROM_HOTBAR = Set.of(ItemID.POTION,
             ItemID.SPLASH_POTION, ItemID.LINGERING_POTION, ItemID.ENDER_PEARL);
     private static final double TIMER_KICK_VIOLATIONS = 15.0;
-    private static final int TIMER_WINDOW_TICKS = 60;
-    private static final long TIMER_TICK_NANOS = 50_000_000L;
-    private static final double TIMER_MAXIMUM_RATIO = 1.7;
-    private static final double TIMER_PING_ALLOWANCE = 0.5;
+    /** Buffer taken off on every server tick the client's clock stays within tolerance. */
+    private static final double TIMER_BUFFER_DECAY = 0.05;
     private static final int FAST_USE_MINIMUM_TICKS = 5;
     private static final int RIPTIDE_CHARGE_TICKS = 10;
 
@@ -167,40 +165,29 @@ public final class PacketListener implements Listener {
     }
 
     /**
-     * Compares the inputs a player sent with the real time that passed, in 50 ms ticks. Counting
-     * server ticks instead would make every player look fast after a stall or under low TPS, since
-     * the client keeps sending 20 inputs a second while the server falls behind.
+     * Timer on the client's own clock, anchored by latency acknowledgments: every input advances
+     * it 50 ms and every answered probe pulls it up to the time the probe was sent. A connection
+     * that delays and then bunches inputs (Wi-Fi, lag spikes) only catches the clock up; a client
+     * sending inputs faster than real time pushes it ahead of now, which is what is flagged.
      */
     private void inspectTimer(Player player, PlayerData data, long now) {
         data.network.drainOverBudgetInputs();
-        data.timerInputs += data.network.drainInputCount();
-        data.timerTicks += data.timerClockNanos == 0 ? 1.0
-                : (now - data.timerClockNanos) / (double) TIMER_TICK_NANOS;
-        data.timerClockNanos = now;
+        data.network.drainInputCount();
+        long ahead = data.network.drainTimerAheadNanos();
         if (data.inGrace() || player.hasPermission("amethyst.bypass")) {
-            data.timerInputs = 0;
-            data.timerTicks = 0;
+            data.network.resetTimerClock(now);
             data.timerWarmup = 0;
             return;
         }
         if (data.timerWarmup < Math.max(0, plugin.settings().timerWarmupPackets())) {
             data.timerWarmup++;
-            data.timerInputs = 0;
-            data.timerTicks = 0;
-            return;
-        }
-        if (data.timerTicks < TIMER_WINDOW_TICKS) {
+            data.network.resetTimerClock(now);
             return;
         }
 
-        double ratio = data.timerInputs / (double) data.timerTicks;
-        data.timerInputs = 0;
-        data.timerTicks = 0;
-
-        long ping = Math.max(0, NetworkCheckSupport.ping(player));
-        double allowed = TIMER_MAXIMUM_RATIO + Math.min(TIMER_PING_ALLOWANCE, ping / 1000.0);
-        if (ratio <= allowed) {
-            data.timerBuffer = Math.max(0.0, data.timerBuffer - 1.0);
+        long tolerance = Math.max(0, plugin.settings().timerToleranceMs()) * 1_000_000L;
+        if (ahead <= tolerance) {
+            data.timerBuffer = Math.max(0.0, data.timerBuffer - TIMER_BUFFER_DECAY);
             return;
         }
 
@@ -211,11 +198,12 @@ public final class PacketListener implements Listener {
         }
 
         data.timerBuffer = 0.0;
-        int excess = (int) Math.round((ratio - 1.0) * 100);
+        // Back on real time, so one burst is one flag rather than one per tick until time catches up.
+        data.network.resetTimerClock(now);
         double vl = data.violations.merge(CheckType.TIMER.id(), 1.0, Double::sum);
         if (now - data.lastAlertNanos > 300_000_000L) {
             plugin.alert(player, CheckType.TIMER, vl,
-                    "ratio=" + NetworkCheckSupport.format(ratio) + " excess=" + excess + "%");
+                    "ahead=" + (ahead / 1_000_000L) + "ms ack=" + data.network.stackLatencyMillis() + "ms");
             data.lastAlertNanos = now;
         }
         if (vl >= TIMER_KICK_VIOLATIONS) {

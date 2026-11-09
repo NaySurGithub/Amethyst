@@ -135,7 +135,8 @@ creative and spectator players are exempt.
 | `vehicle.buffer-threshold` | `0.4` | Buffered vehicle error before a violation. |
 | `vehicle.buffer-decay` | `0.1` | Removed after valid vehicle movement. |
 | `timer.warmup-packets` | `40` | Input packets ignored after joining before `Timer` measures. |
-| `timer.violation-samples` | `8` | Over-rate windows needed before a `Timer` violation, in eighths (`8` = one window). |
+| `timer.violation-samples` | `8` | Ticks spent ahead of real time before a `Timer` violation, in eighths (`8` = one tick). |
+| `timer.tolerance-ms` | `100` | How far the client's clock may run ahead of real time, in milliseconds. |
 | `combat.bbox-expansion` | `0.1` | Expansion of rewound target hitboxes. |
 | `combat.reach-leniency` | `0.0` | Extra tolerance on the predicted ray. |
 | `combat.interpolation-steps` | `10` | Partial-tick samples for attacker and target rewind. |

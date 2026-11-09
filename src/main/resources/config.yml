@@ -34,6 +34,9 @@ inventory-move:
 timer:
   warmup-packets: 40
   violation-samples: 8
+  # How far (ms) the client's clock may run ahead of real time. The clock is re-anchored on every
+  # latency acknowledgment, so late or bunched packets from a poor connection never add up here.
+  tolerance-ms: 100
 prediction:
   # Offset, in blocks, ignored on a single tick. Anything above it feeds the buffer below.
   tolerance: 0.05

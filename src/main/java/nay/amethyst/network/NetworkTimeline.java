@@ -21,6 +21,14 @@ public final class NetworkTimeline {
     private final List<Runnable> currentAcknowledgments = new ArrayList<>();
     private AcknowledgmentType currentType = AcknowledgmentType.GENERIC;
     private boolean acknowledgmentFlushScheduled;
+    /**
+     * Timer: the client's own clock, advanced 50 ms per input and pulled up to the server send
+     * time of every acknowledged latency probe (the client cannot be behind a probe it answered).
+     * Late, bunched inputs after a lag spike therefore never count as speed; only a clock that
+     * runs ahead of real time does.
+     */
+    private long timerClockNanos;
+    private long timerAheadNanos;
 
     public synchronized void tick(long now) {
         long elapsedTicks = lastServerTickNanos == 0 ? 1
@@ -54,6 +62,7 @@ public final class NetworkTimeline {
         }
         clientTick++;
         inputCount++;
+        advanceTimerClock(System.nanoTime());
         int elapsedTicks = (int) Math.max(1, Math.min(20, serverTick - lastInputServerTick));
         lastInputServerTick = serverTick;
         return elapsedTicks;
@@ -126,12 +135,32 @@ public final class NetworkTimeline {
         if (match == null) return List.of();
 
         stackLatencyNanos = Math.max(0, now - match.sentNanos());
+        if (timerClockNanos != 0) timerClockNanos = Math.max(timerClockNanos, match.sentNanos());
         if (clientTick < match.serverTick() || clientTick >= serverTick) clientTick = match.serverTick();
         return match.callbacks();
     }
 
     public synchronized List<Runnable> expireDelayedAcks() {
         return acknowledgments.expire(serverTick, ACK_CUTOFF_TICKS);
+    }
+
+    private void advanceTimerClock(long now) {
+        if (timerClockNanos == 0) timerClockNanos = now - TICK_NANOS;
+        timerClockNanos += TICK_NANOS;
+        timerAheadNanos = Math.max(timerAheadNanos, timerClockNanos - now);
+    }
+
+    /** Furthest the client's clock ran ahead of real time since the last call, in nanoseconds. */
+    public synchronized long drainTimerAheadNanos() {
+        long ahead = timerAheadNanos;
+        timerAheadNanos = 0;
+        return ahead;
+    }
+
+    /** Puts the client's clock back on real time (grace, warmup, after a flag). */
+    public synchronized void resetTimerClock(long now) {
+        timerClockNanos = now;
+        timerAheadNanos = 0;
     }
 
     public synchronized long stackLatencyMillis() {
@@ -150,6 +179,8 @@ public final class NetworkTimeline {
         nextProbeTick = 0;
         lastInputServerTick = -1;
         stackLatencyNanos = 0;
+        timerClockNanos = 0;
+        timerAheadNanos = 0;
         allowedInputs = 65535;
         receivedFirstInput = false;
         currentAcknowledgments.clear();

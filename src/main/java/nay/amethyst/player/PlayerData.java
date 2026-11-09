@@ -53,9 +53,6 @@ public final class PlayerData {
     public double velocityBuffer;
     public double timerBuffer;
     public int timerWarmup;
-    public int timerInputs;
-    public double timerTicks;
-    public long timerClockNanos;
     public int airStallBuffer;
     public int sprintFoodBuffer;
     public int sprintUseBuffer;
@@ -493,9 +490,6 @@ public final class PlayerData {
         velocityBuffer = 0.0;
         timerBuffer = 0.0;
         timerWarmup = 0;
-        timerInputs = 0;
-        timerTicks = 0;
-        timerClockNanos = 0;
         airStallBuffer = 0;
         sprintFoodBuffer = 0;
         sprintUseBuffer = 0;
