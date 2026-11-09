@@ -57,6 +57,8 @@ public final class MovementPacketProcessor {
     private static final long LEVITATION_GRACE_MILLIS = 3000;
     private static final int GLIDE_TAIL_TICKS = 20;
     private static final int SLEEP_GRACE_TICKS = 100;
+    /** Reach of the exemption a bed grants: the bed itself and the spot beside it. */
+    private static final double BED_GRACE_RADIUS = 4.0;
     private static final double MAX_SIMULATED_MOVEMENT_SPEED = 0.5;
     private static final int AIR_STALL_TICKS = 6;
     private static final double AIR_STALL_MAXIMUM_DELTA = 0.025;
@@ -153,6 +155,7 @@ public final class MovementPacketProcessor {
                 observedDelta, observedMovement);
         data.nearServerMotionTick = !serverMotionRecovery
                 && data.nearServerMotion(observedDelta, observedMovement);
+        endBedGraceAwayFromBed(data, clientPosition);
         boolean bypassed = data.inGrace() || serverMotionRecovery;
         if (bypassed) {
             data.motion.ready(false);
@@ -237,6 +240,21 @@ public final class MovementPacketProcessor {
         }
     }
 
+    private static void endBedGraceAwayFromBed(PlayerData data, Vector3f position) {
+        Vector3 bed = data.bedAnchor;
+        if (bed == null) return;
+        if (!data.inGrace(GraceReason.TELEPORT)) {
+            data.bedAnchor = null;
+            return;
+        }
+        double feetY = position.getY() - MovementConstants.PLAYER_HEIGHT_OFFSET;
+        if (MovementCheckSupport.squared(position.getX(), feetY, position.getZ(), bed.x, bed.y, bed.z)
+                > BED_GRACE_RADIUS * BED_GRACE_RADIUS) {
+            data.endGrace(GraceReason.TELEPORT);
+            data.bedAnchor = null;
+        }
+    }
+
     public void handleEarlyMovementRejection(Player player, MovementPreValidationResult result) {
         if (result.check() == null || !player.isOnline()
                 || player.hasPermission("amethyst.bypass")
@@ -301,7 +319,7 @@ public final class MovementPacketProcessor {
         float width = (float) (Double.isFinite(data.clientWidth)
                 ? data.clientWidth : player.getWidth());
         float height;
-        if (data.clientSwimming) {
+        if (data.clientSwimming && (data.motion.inWater() || data.motion.nearFluid())) {
             height = player.getSwimmingHeight();
         } else if (data.predictedSneaking) {
             height = player.getSneakingHeight();
@@ -984,7 +1002,8 @@ public final class MovementPacketProcessor {
                 return;
             }
             data.safeLocation = player.getLocation();
-            if (alert && data.beginSimulationCorrectionEpisode()) {
+            if (alert && !plugin.settings().disabledCheck(CheckType.SIMULATION.id())
+                    && data.beginSimulationCorrectionEpisode()) {
                 long now = System.nanoTime();
                 data.exemptBreakReach(now);
                 data.exemptBadPacketM(now);
@@ -1002,7 +1021,7 @@ public final class MovementPacketProcessor {
 
     public static boolean recentlySleeping(PlayerData data) {
         return data.lastSleepingTick != Long.MIN_VALUE
-                && data.lastTick - data.lastSleepingTick < SLEEP_GRACE_TICKS;
+                && data.inputSequence - data.lastSleepingTick < SLEEP_GRACE_TICKS;
     }
 
     private static boolean recentlyGliding(PlayerData data) {

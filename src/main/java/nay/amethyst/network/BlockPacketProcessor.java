@@ -258,10 +258,8 @@ public final class BlockPacketProcessor {
         long configured = Math.max(0, plugin.settings().blocksBreakLeniencyMs());
         long roundTrip = Math.max(0, data.network.stackLatencyMillis());
         long oneWay = Math.min(500, (roundTrip + 1) / 2);
-        long tickCatchup = 0;
-        if (data.lastTick >= 0 && clientTick > data.lastTick) {
-            tickCatchup = Math.min(250, (clientTick - data.lastTick) * 50);
-        }
+        // one input is one tick: a client tick that jumps ahead buys no extra time
+        long tickCatchup = data.lastTick >= 0 && clientTick > data.lastTick ? 50 : 0;
         return Math.min(750, configured + oneWay + tickCatchup);
     }
 }

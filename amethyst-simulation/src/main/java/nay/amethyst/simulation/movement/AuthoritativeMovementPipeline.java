@@ -63,9 +63,11 @@ public final class AuthoritativeMovementPipeline {
             state.position(state.client().position());
         }
 
-        if (hadTeleport || hadKnockback || impulseDeferred
-                || wasGliding && anchored) {
+        if (hadTeleport || hadKnockback || impulseDeferred) {
             state.velocity(state.client().velocity());
+        } else if (wasGliding && anchored) {
+            // a glide follows the client's direction, never a speed the simulation did not reach
+            state.velocity(capped(state.client().velocity(), state.velocity().length()));
         }
 
         if (!correctionRequired && !needsCorrection && !hadTeleport && !hadKnockback
@@ -180,6 +182,11 @@ public final class AuthoritativeMovementPipeline {
 
         state.restore(best);
         return result;
+    }
+
+    private static FloatVector capped(FloatVector velocity, float maximum) {
+        float length = velocity.length();
+        return length > maximum && length > 0.0f ? velocity.multiply(maximum / length) : velocity;
     }
 
     private static boolean restsOnCollider(FloatBox box, MovementWorldView world) {

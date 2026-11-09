@@ -158,6 +158,7 @@ public final class PacketListener implements Listener {
             data.network.tick(now);
             // an unanswered probe is applied after the cutoff: withholding it cannot hold state back
             runAcknowledgments(data.network.expireDelayedAcks());
+            data.decayViolations(now, plugin.settings().violationDecaySeconds() * 1_000_000_000L);
             if (player.getRiding() != null) {
                 data.lastRidingNanos = now;
             }
@@ -176,7 +177,8 @@ public final class PacketListener implements Listener {
         data.network.drainOverBudgetInputs();
         data.network.drainInputCount();
         long ahead = data.network.drainTimerAheadNanos();
-        if (data.inGrace() || player.hasPermission("amethyst.bypass")) {
+        if (data.inGrace() || player.hasPermission("amethyst.bypass")
+                || plugin.settings().disabledCheck(CheckType.TIMER.id())) {
             data.network.resetTimerClock(now);
             data.timerWarmup = 0;
             return;
@@ -248,7 +250,7 @@ public final class PacketListener implements Listener {
         movementSessions.reset(player);
 
         String tool = BedrockToolDetector.detect(player);
-        if (tool != null) {
+        if (tool != null && !plugin.settings().disabledCheck(CheckType.BEDROCK_TOOL_A.id())) {
             double vl = data.violations.merge(CheckType.BEDROCK_TOOL_A.id(), 1.0, Double::sum);
             plugin.alert(player, CheckType.BEDROCK_TOOL_A, vl, tool);
             kick(player, data, "Unsupported client");
@@ -277,7 +279,7 @@ public final class PacketListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBedEnter(PlayerBedEnterEvent event) {
-        PlayerData data = grantBedGrace(event.getPlayer());
+        PlayerData data = grantBedGrace(event.getPlayer(), event.getBed());
         if (data != null) {
             data.inBed = true;
         }
@@ -285,14 +287,14 @@ public final class PacketListener implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onBedLeave(PlayerBedLeaveEvent event) {
-        PlayerData data = grantBedGrace(event.getPlayer());
+        PlayerData data = grantBedGrace(event.getPlayer(), event.getBed());
         if (data != null) {
             data.inBed = false;
-            data.lastSleepingTick = data.lastTick;
+            data.lastSleepingTick = data.inputSequence;
         }
     }
 
-    private PlayerData grantBedGrace(Player player) {
+    private PlayerData grantBedGrace(Player player, Block bed) {
         if (player == null) {
             return null;
         }
@@ -302,6 +304,7 @@ public final class PacketListener implements Listener {
         }
         data.lastPosition = null;
         data.grantGrace(GraceReason.TELEPORT, TELEPORT_GRACE_MILLIS);
+        data.bedAnchor = bed == null ? null : new Vector3(bed.x + 0.5, bed.y, bed.z + 0.5);
         return data;
     }
 
@@ -366,7 +369,7 @@ public final class PacketListener implements Listener {
             return;
         }
         BadPacketCheck.Result badPacket = badPacketCheck.inspect(player, playerData, event.getPacket());
-        if (badPacket != null) {
+        if (badPacket != null && !plugin.settings().disabledCheck(badPacket.check().id())) {
             if (event.getPacket() instanceof PlayerAuthInputPacket) {
                 playerData.movementPacketDropped = true;
             }
@@ -415,7 +418,8 @@ public final class PacketListener implements Listener {
             if (packet.getTransaction() instanceof ItemUseOnActorInventoryTransaction attack
                     && attack.getActionType() == ItemUseOnActorActionType.ATTACK) {
                 playerData.lastCombatNanos = System.nanoTime();
-                if (inspectClickRate(event, player, playerData, playerData.leftCps(), "left")) {
+                int clicks = Math.max(playerData.leftCps(), playerData.clickAttack());
+                if (inspectClickRate(event, player, playerData, clicks, "left")) {
                     return;
                 }
             }

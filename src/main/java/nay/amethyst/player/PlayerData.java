@@ -65,8 +65,13 @@ public final class PlayerData {
     private final int[] leftClicks = new int[CLICK_WINDOW_TICKS];
     private final int[] rightClicks = new int[CLICK_WINDOW_TICKS];
     private int clickSlot;
+    private final int[] attackClicks = new int[CLICK_WINDOW_TICKS];
     private int leftCps;
     private int rightCps;
+    private int attackCps;
+    private long lastViolationDecayNanos;
+    /** Bed the current teleport exemption was granted for; the exemption ends away from it. */
+    public Vector3 bedAnchor;
     public long lastGlideStartTick = Long.MIN_VALUE;
     public long itemUseStartTick = Long.MIN_VALUE;
     public long riptideUseStartTick = Long.MIN_VALUE;
@@ -339,8 +344,33 @@ public final class PlayerData {
         clickSlot = (clickSlot + 1) % CLICK_WINDOW_TICKS;
         leftCps -= leftClicks[clickSlot];
         rightCps -= rightClicks[clickSlot];
+        attackCps -= attackClicks[clickSlot];
         leftClicks[clickSlot] = 0;
         rightClicks[clickSlot] = 0;
+        attackClicks[clickSlot] = 0;
+    }
+
+    /** Attacks count on their own: the swing animation is a packet a client can leave out. */
+    public synchronized int clickAttack() {
+        attackClicks[clickSlot]++;
+        return ++attackCps;
+    }
+
+    /** Takes one violation off every check each time the interval elapses. */
+    public void decayViolations(long now, long intervalNanos) {
+        if (intervalNanos <= 0) return;
+        if (lastViolationDecayNanos == 0) {
+            lastViolationDecayNanos = now;
+            return;
+        }
+        if (now - lastViolationDecayNanos < intervalNanos) return;
+        lastViolationDecayNanos = now;
+        violations.replaceAll((check, level) -> level - 1.0);
+        violations.values().removeIf(level -> level <= 0.0);
+    }
+
+    public void endGrace(GraceReason reason) {
+        gracePeriods.revoke(reason);
     }
 
     public synchronized void clickLeft() {
@@ -468,6 +498,7 @@ public final class PlayerData {
     public void grantGrace(GraceReason reason, long millis) {
         gracePeriods.clear();
         gracePeriods.grant(reason, millis);
+        bedAnchor = null;
         timerSamples = 0;
         timerOverLimitSamples = 0;
         inputSequence = 0;
@@ -567,7 +598,9 @@ public final class PlayerData {
 
     public synchronized void resetMovementPipeline() {
         clearRiptideCandidates();
+        AuthoritativeMotionState previous = motion;
         motion = new AuthoritativeMotionState();
+        motion.adoptAcknowledged(previous);
         movementPipeline = new AuthoritativeMovementPipeline(motion, MovementOptions.defaults());
     }
 

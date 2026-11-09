@@ -172,7 +172,7 @@ public final class AuthoritativeMotionState {
         // the client scales by the sneak key or last tick's sneak flag, never while swimming nor in
         // water; the cap is skipped near any fluid so a disagreeing water test cannot over-cap
         float maximumInput = 1.0f;
-        if ((pressingSneak || previousSneaking) && !swimming && !inWater && !nearFluid) {
+        if ((pressingSneak || previousSneaking) && !inWater && !nearFluid) {
             maximumInput *= sneakSpeed(swiftSneakLevel);
         }
         if (consuming) maximumInput *= MovementConstants.CONSUMING_INPUT;
@@ -194,6 +194,23 @@ public final class AuthoritativeMotionState {
         } else if (input.has(MovementInputFlag.START_GLIDING) && wearingElytra) {
             gliding = true;
         }
+    }
+
+    /** Carries what the client acknowledged across a reset: a teleport sends none of it again. */
+    public void adoptAcknowledged(AuthoritativeMotionState previous) {
+        mayFly = previous.mayFly;
+        flying = previous.flying;
+        noClip = previous.noClip;
+        trustFlightStatus = previous.trustFlightStatus;
+        immobile = previous.immobile;
+        affectedByGravity = previous.affectedByGravity;
+        alive = previous.alive;
+        jumpBoostLevel = previous.jumpBoostLevel;
+        jumpBoostTicks = previous.jumpBoostTicks;
+        levitationLevel = previous.levitationLevel;
+        levitationTicks = previous.levitationTicks;
+        slowFalling = previous.slowFalling;
+        slowFallingTicks = previous.slowFallingTicks;
     }
 
     public void finishInput() {
@@ -560,6 +577,10 @@ public final class AuthoritativeMotionState {
 
     public boolean sprinting() {
         return sprinting;
+    }
+
+    public void swimming(boolean value) {
+        swimming = value;
     }
 
     public boolean swimming() {

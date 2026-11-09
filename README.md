@@ -127,6 +127,7 @@ creative and spectator players are exempt.
 | `disabled-checks` | `[]` | Check ids to turn off, as written in the alerts. |
 | `updates.check` | `true` | Checks for a newer release on startup. |
 | `setback-violations` | `2.0` | Violations before a movement setback. |
+| `violation-decay-seconds` | `30` | Seconds after which every check loses one violation. `0` keeps them forever. |
 | `max-packet-actions` | `12` | Block actions accepted in one input packet. |
 | `prediction.tolerance` | `0.05` | Offset ignored on a single tick, in blocks. |
 | `prediction.buffer-threshold` | `0.6` | Accumulated excess needed before flagging. |
@@ -134,8 +135,8 @@ creative and spectator players are exempt.
 | `vehicle.tolerance` | `0.16` | Accepted vehicle model error. |
 | `vehicle.buffer-threshold` | `0.4` | Buffered vehicle error before a violation. |
 | `vehicle.buffer-decay` | `0.1` | Removed after valid vehicle movement. |
-| `timer.warmup-packets` | `40` | Input packets ignored after joining before `Timer` measures. |
-| `timer.violation-samples` | `8` | Ticks spent ahead of real time before a `Timer` violation, in eighths (`8` = one tick). |
+| `timer.warmup-packets` | `40` | Server ticks ignored after joining before `Timer` measures. |
+| `timer.violation-samples` | `8` | Ticks spent ahead of real time before a `Timer` violation, in eighths (`8` or less = one tick). |
 | `timer.tolerance-ms` | `100` | How far the client's clock may run ahead of real time, in milliseconds. |
 | `combat.bbox-expansion` | `0.1` | Expansion of rewound target hitboxes. |
 | `combat.reach-leniency` | `0.0` | Extra tolerance on the predicted ray. |

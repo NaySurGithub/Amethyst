@@ -28,6 +28,7 @@ public final class AmethystPlugin extends PluginBase {
     private volatile AmethystSettings settings;
     private final AlertFormatter alertFormatter = new AlertFormatter();
     private final ContainerConcealer concealer = new ContainerConcealer();
+    private int concealTicks;
 
     private static AmethystPlugin instance;
 
@@ -50,8 +51,7 @@ public final class AmethystPlugin extends PluginBase {
         movementSessions.setTimelineProvider(listener::networkTimeline);
         registerEvents(listener);
         getServer().getScheduler().scheduleRepeatingTask(this, listener::onServerTick, 1);
-        getServer().getScheduler().scheduleRepeatingTask(this, this::concealContainers,
-                Math.max(1, settings.concealInterval()));
+        getServer().getScheduler().scheduleRepeatingTask(this, this::concealContainers, 1);
         getLogger().info("Amethyst is enabled don't worry about hackers");
         if (getConfig().getBoolean("updates.check", true)) VersionChecker.checkAsync(this);
     }
@@ -72,7 +72,13 @@ public final class AmethystPlugin extends PluginBase {
     void loadSettings() {
         reloadConfig();
         alertsEnabled = getConfig().getBoolean("alerts", true);
+        boolean concealed = settings != null && settings.concealContainers();
         settings = AmethystSettings.load(getConfig());
+        if (concealed && !settings.concealContainers()) {
+            for (Player player : getServer().getOnlinePlayers().values()) {
+                concealer.reveal(player);
+            }
+        }
     }
 
     public ContainerConcealer concealer() {
@@ -81,7 +87,8 @@ public final class AmethystPlugin extends PluginBase {
 
     private void concealContainers() {
         AmethystSettings current = settings;
-        if (current == null || !current.concealContainers()) {
+        if (current == null || !current.concealContainers()
+                || ++concealTicks % Math.max(1, current.concealInterval()) != 0) {
             return;
         }
         for (Player player : getServer().getOnlinePlayers().values()) {
@@ -145,7 +152,7 @@ public final class AmethystPlugin extends PluginBase {
             return true;
         }
         if (args.length == 0 || args[0].equalsIgnoreCase("status")) {
-            sender.sendMessage("Amethyst 1.0.5 | tracked=" + players.size() + " | alerts=" + alertsEnabled);
+            sender.sendMessage("Amethyst " + getDescription().getVersion() + " | tracked=" + players.size() + " | alerts=" + alertsEnabled);
             sender.sendMessage(memoryStatus());
             return true;
         }

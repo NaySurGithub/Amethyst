@@ -3,13 +3,15 @@ alerts: true
 # positive, noisy for everyday use.
 dev-logs: false
 # Check ids to turn off entirely, as written in the alerts. Example:
-# disabledCheck-checks:
+# disabled-checks:
 #   - Autoclicker-A
 #   - Timer
 disabled-checks: []
 updates:
   check: true
 setback-violations: 2.0
+# Seconds after which every check loses one violation, so old flags stop counting. 0 keeps them forever.
+violation-decay-seconds: 30
 # Containers a player has no line of sight to are sent as the block around them, so a client that
 # draws through terrain has nothing to draw. They come back before the player can see them.
 conceal-containers:

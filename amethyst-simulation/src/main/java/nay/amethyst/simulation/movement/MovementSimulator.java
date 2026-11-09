@@ -31,6 +31,10 @@ public final class MovementSimulator {
 
         state.headInWater(headInWater(state, world));
         state.nearFluid(world.hasLiquidIntersection(state.boundingBox().grow(1.0f, 1.0f, 1.0f)));
+        // swimming is the client's word: it holds only with liquid within reach
+        if (state.swimming() && !state.nearFluid()) {
+            state.swimming(false);
+        }
 
         // glide input: +0.1 lift while gliding with jump held in creative, after 11 glide ticks
         boolean glideLift = state.gliding() && state.pressingJump() && state.instabuild()

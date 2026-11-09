@@ -57,8 +57,10 @@ public record BlockFrame(
                         (float) collision.maxY() - topInset, (float) collision.maxZ()));
             }
         }
-        boolean water = block.getId().contains("water") || block instanceof BlockBubbleColumn;
-        boolean lava = block.getId().contains("lava");
+        // by class: the ids of lily pads and lava cauldrons contain the fluid names too
+        boolean fluidBlock = block instanceof BlockLiquid;
+        boolean water = fluidBlock && block.getId().contains("water") || block instanceof BlockBubbleColumn;
+        boolean lava = fluidBlock && block.getId().contains("lava");
         double fluidHeight = 0;
         Vector3 flow = Vector3.ZERO;
         if (block instanceof BlockLiquid liquid) {

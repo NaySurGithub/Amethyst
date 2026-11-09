@@ -90,6 +90,51 @@ final class ClientClaimTest {
     }
 
     @Test
+    void startSwimming_onDryLandDoesNotHold() {
+        TestBlockWorld world = floor();
+        AuthoritativeMovementPipeline pipeline = pipeline(10.0f, true);
+
+        pipeline.handle(input(1, 0.5f, 10.0f, FloatVector.ZERO)
+                .flag(MovementInputFlag.START_SWIMMING).build(), world);
+
+        assertFalse(pipeline.state().swimming());
+    }
+
+    @Test
+    void glide_neverAdoptsMoreSpeedThanItSimulated() {
+        AuthoritativeMovementPipeline pipeline = pipeline(60.0f, false);
+        pipeline.state().wearingElytra(true);
+        TestBlockWorld world = new TestBlockWorld();
+        pipeline.handle(input(1, 0.5f, 60.0f, FloatVector.ZERO)
+                .flag(MovementInputFlag.START_GLIDING).build(), world);
+        FloatVector feet = pipeline.state().position();
+
+        MovementPipelineResult result = pipeline.handle(
+                input(2, feet.x(), feet.y(), new FloatVector(0.0f, 0.0f, 5.0f)).build(), world);
+
+        assertTrue(pipeline.state().gliding());
+        assertTrue(result.authoritativeVelocity().length() < 1.0f,
+                "declared 5 blocks a tick, simulated a fraction of one");
+    }
+
+    @Test
+    void reset_keepsWhatTheClientAcknowledged() {
+        AuthoritativeMotionState previous = new AuthoritativeMotionState();
+        previous.abilities(true, true, false);
+        previous.slowFalling(true, 200);
+        previous.levitation(2, 100);
+        previous.immobile(true);
+
+        AuthoritativeMotionState next = new AuthoritativeMotionState();
+        next.adoptAcknowledged(previous);
+
+        assertTrue(next.flying());
+        assertTrue(next.slowFalling());
+        assertEquals(2, next.levitationLevel());
+        assertTrue(next.immobile());
+    }
+
+    @Test
     void verticalCollisionInMidAir_grantsNoJump() {
         TestBlockWorld world = floor();
         AuthoritativeMovementPipeline pipeline = pipeline(20.0f, false);
